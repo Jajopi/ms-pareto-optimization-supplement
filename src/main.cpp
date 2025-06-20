@@ -13,6 +13,7 @@
 #include "streaming.h"
 #include "khash_utils.h"
 #include "conversions.h"
+#include "joint.h"
 
 #include <iostream>
 #include <string>
@@ -89,6 +90,7 @@ int usage_subcommand(std::string subcommand) {
 
 constexpr int MAX_K = 127;
 constexpr int SIMPLITIG_RATIO_THRESHOLD = 5;
+constexpr const char* ALG_JOINT = "joint";
 
 void Version() {
     std::cerr << VERSION << std::endl;
@@ -97,7 +99,7 @@ void Version() {
 /// Run KmerCamel with the given parameters.
 template <typename kmer_t, typename kh_wrapper_t>
 int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, int d_max, std::ostream *of, std::ostream *maskf, bool complements, bool masks,
-                    std::string algorithm, bool lower_bound, bool assume_simplitigs) {
+                    std::string algorithm, bool lower_bound, bool assume_simplitigs, std::string objective) {
     if (masks) {
         WriteLog("Started optimization of a masked superstring from '" + path + "'.");
         int ret = Optimize(wrapper, kmer_type, algorithm, path, *of, k, complements);
@@ -116,11 +118,11 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         WriteLog("Finished masked superstring computation.");
     }
     /* Handle hash table based algorithms separately so that they consume less memory. */
-    else if (algorithm == "global" || algorithm == "local") {
+    else if (algorithm == "global" || algorithm == "local" || algorithm == ALG_JOINT) {
 
         auto *kMers = wrapper.kh_init_set();
-        size_t kmer_count;
-        if (!assume_simplitigs) {
+        size_t kmer_count = 0;
+        if (!assume_simplitigs || algorithm == ALG_JOINT) {
             ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
 
             if (!kh_size(kMers)) {
@@ -148,8 +150,14 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
                PartialPreSort(kMerVec, k);
                GlobalSparse(wrapper, kMerVec, *of, maskf, k, complements);
             }
-            else if (lower_bound) std::cout << LowerBoundLength(wrapper, kmer_type, simplitigs, k, complements);
+            else if (lower_bound) *of << LowerBoundLength(wrapper, kmer_type, simplitigs, k, complements);
             else Global(wrapper, kmer_type, simplitigs, *of, maskf, k, complements);
+        } else if (algorithm == ALG_JOINT){
+            std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
+            wrapper.kh_destroy_set(kMers);
+
+            if (lower_bound) *of << LowerBoundJoint(kMerVec, k, complements, objective);
+            else JointOptimization(kMerVec, *of, k, complements, objective);
         } else {
             Local(kMers, wrapper, kmer_type, *of, k, d_max, complements);
             WriteLog("Finished masked superstring computation.");
@@ -198,8 +206,9 @@ int camel_compute(int argc, char **argv) {
     bool d_set = false;
     bool assume_simplitigs = false;
     int opt;
+    std::string objective = "";
     try {
-        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:S"))  != -1) {
+        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:"))  != -1) {
             switch(opt) {
                 case 'o':
                     output.open(optarg);
@@ -227,6 +236,9 @@ int camel_compute(int argc, char **argv) {
                     break;
                 case 'S':
                     assume_simplitigs = true;
+                    break;
+                case 'O':
+                    objective = optarg;
                     break;
                 case 'h':
                     usage_subcommand(subcommand);
@@ -263,13 +275,16 @@ int camel_compute(int argc, char **argv) {
     } else if (assume_simplitigs && algorithm != "global") {
         std::cerr << "Optimization for the input being simplitigs is possible only with global." << std::endl;
         return usage_subcommand(subcommand);
+    } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
+        std::cerr << "Joint optimization needs an objective: either -O runs or -O zeros." << std::endl;
+        return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
     }
 }
 
@@ -327,11 +342,11 @@ int camel_optimize(int argc, char **argv) {
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
     }
 }
 
@@ -346,10 +361,11 @@ int camel_lowerbound(int argc, char **argv) {
     std::ostream *of = &std::cout;
     bool complements = true;
     int opt;
+    std::string objective = "";
     try {
         while ((opt = getopt(argc, argv, "k:hux"))  != -1) {
             switch(opt) {
-                case  'k':
+                case 'k':
                     k = std::stoi(optarg);
                     break;
                 case 'u':
@@ -359,6 +375,9 @@ int camel_lowerbound(int argc, char **argv) {
                     return 0;
                 case 'x':
                     std::cerr << "Warning: The parameter -x currently has no effect due to the improvement in the underlying algorithm." <<std::endl;
+                    break;
+                case 'O':
+                    objective = optarg;
                     break;
                 default:
                     return usage_subcommand(subcommand);
@@ -379,11 +398,11 @@ int camel_lowerbound(int argc, char **argv) {
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
     }
 }
 

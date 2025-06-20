@@ -8,9 +8,11 @@ inline bool is_upper(char c) {
 }
 
 inline char to_upper(char c) {
-    constexpr int alphabet_shift = 'a' - 'A';
-    bool upper = is_upper(c);
-    return upper ? c : c - alphabet_shift;
+    return c & 95;
+}
+
+inline char to_lower(char c){
+    return c | 32;
 }
 
 void split_ms(std::ostream &superstring, std::ostream &mask, std::string path) {
