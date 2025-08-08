@@ -11,7 +11,10 @@
 
 #include "kmers.h"
 #include "parser.h"
-#include "joint.h"
+
+enum JointObjective {
+    RUNS, ZEROS
+};
 
 typedef uint8_t size_k_max;
 
@@ -188,19 +191,16 @@ template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool C
 inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::construct_complements() {
     if constexpr (COMPLEMENTS){
         complements.resize(N);
-        bool even_k = K % 2 == 0;
     
         std::vector<std::pair<kmer_t, size_n_max>> complement_kmers(N);
         for (size_n_max i = 0; i < N; ++i){
             complement_kmers[i] = std::make_pair(ReverseComplement(kMers[i], K),
-                                                 even_k ? N - i : i); /// For even k, swap indexes for same pairs of kmers
+                                                 N - i); /// For even k, swapping indexes for same pairs of kmers is needed
         }
     
         std::sort(complement_kmers.begin(), complement_kmers.end());
         
-        for (size_n_max i = 0; i < N; ++i){
-            complements[i] = even_k ? N - complement_kmers[i].second : complement_kmers[i].second;
-        }
+        for (size_n_max i = 0; i < N; ++i) complements[i] = N - complement_kmers[i].second;
     }
 }
 
@@ -209,7 +209,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
     if (RESULT_COMPUTED){
         throw std::invalid_argument("Result has already been computed.");
     }
-    size_n_max SEARCH_CUTOFF = N / (1 << 10);
+    size_n_max SEARCH_CUTOFF = 1;
 
     components = UnionFind(N);
     backtracks.reserve(N); /// Chains for leaves where backtracking is needed
@@ -297,9 +297,9 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::optimize_res
     if (!RESULT_COMPUTED){
         throw std::invalid_argument("Result has not been computed yet.");
     }
-    WriteLog("Starting optimization of the masked superstring.");
-
-    WriteLog("Finished optimization of the masked superstring.");
+    WriteLog("Starting secondary optimization of the masked superstring.");
+    WriteLog("No optimization implemented yet.");
+    WriteLog("Finished secondary optimization of the masked superstring.");
 }
 
 // Internal functions
@@ -446,8 +446,8 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::push_failure
         }
     }
     if constexpr (OBJECTIVE == JointObjective::ZEROS){
-        if (priority < (node_depth - failure_depth) * 2 - 1) return;
-        priority -= (node_depth - failure_depth) * 2 - 1;
+        if (priority < (node_depth - failure_depth) * (1 + PENALTY) - 1) return;
+        priority -= (node_depth - failure_depth) * (1 + PENALTY) - 1;
     }
 
     stack.emplace_back(priority, failure_depth, failure_index, last_leaf);
