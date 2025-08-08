@@ -10,20 +10,15 @@
 
 #include "kmers.h"
 #include "parser.h"
-
-enum JointObjective {
-    RUNS, ZEROS
-};
-
 #include "joint_loac.h"
 
 template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
-void compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS> loac, std::ostream& of){
+void compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>&& loac, std::ostream& of){
     loac.compute_result();
     loac.optimize_result(); // TODO add parameters
     size_t objective = loac.print_result(of);
 
-    std::cerr << objective << std::endl;
+    WriteLog("Finished joint optimization of masked superstring, resulting objective: " + std::to_string(objective) + ".");
 }
 
 /// The joint optimization process
@@ -40,20 +35,20 @@ void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, si
         else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), 7), of);
     }
     else {
-        throw std::invalid_argument("Invalid objective function");
+        throw std::invalid_argument("Invalid objective function specified");
     }    
 }
 
-// Removes duplicate k-mers from sorted vector
+/// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
 template <typename kmer_t>
-size_t RemoveDuplicateKmers(std::vector<kmer_t> & kMerVec, bool even_k){
-    size_t size_limit = kMerVec.size() - (even_k ? 2 : 1);
+size_t RemoveDuplicateKmers(std::vector<kmer_t> & sorted_kMerVec, bool even_k){
+    size_t size_limit = sorted_kMerVec.size() - (even_k ? 2 : 1);
     size_t removed = 0;
     for (size_t i = 0; i < size_limit; ++i){
-        if (kMerVec[i] == kMerVec[i + 1 + even_k]) ++removed;
-        if (removed != 0) kMerVec[i] = kMerVec[i + removed];
+        if (sorted_kMerVec[i] == sorted_kMerVec[i + 1 + even_k]) ++removed;
+        if (removed != 0) sorted_kMerVec[i] = sorted_kMerVec[i + removed];
     }
-    kMerVec.resize(kMerVec.size() - removed);
+    sorted_kMerVec.resize(sorted_kMerVec.size() - removed);
     return removed;
 }
 
@@ -62,7 +57,7 @@ size_t RemoveDuplicateKmers(std::vector<kmer_t> & kMerVec, bool even_k){
 /// - number of runs of ones in the mask    (JointObjective.RUNS)
 /// - number of zeroes if the mask          (JointObjective.ZEROS)
 ///
-/// This runs in O(n k), where n is the number of k-mers.
+/// This runs in O(n^2 k^2), where n is the number of k-mers.
 /// If complements are provided, treat k-mer and its complement as identical.
 /// If this is the case, k-mers are expected not to contain both k-mer and its complement.
 template <typename kmer_t>
@@ -89,7 +84,7 @@ void JointOptimization(std::vector<kmer_t>& kMerVec, std::ostream& of, int k, bo
         std::sort(kMerVec.begin(), kMerVec.end());
         WriteLog("Finished sorting k-mers.");
 
-        /// Remove k-mers present more times than the should be (2 for self complements, 1 otherwise)
+        /// Skipping this step as input data are nice
         // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
 
         size_t limit = kMerVec.size();
@@ -101,6 +96,6 @@ void JointOptimization(std::vector<kmer_t>& kMerVec, std::ostream& of, int k, bo
             compute_joint_optimization<kmer_t, uint64_t>(kMerVec, of, k, complements, objective);
     }
     catch (const std::exception& e){
-        WriteLog("Exception was thrown: " + std::string(e.what()));
+        WriteLog("Exception was thrown: " + std::string(e.what()) + ".");
     }
 }
