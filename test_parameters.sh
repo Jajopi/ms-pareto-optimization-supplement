@@ -35,17 +35,23 @@ if [[ "$TEST_MODE" == *"F"* ]]; then
     TIME_FORMAT_STRING="%U %M"
 fi
 
-if [[ "$TEST_MODE" != *"S"* ]]; then
-    /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt \
-        ./kmercamel compute -u -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG".txt
-    COMMAND="./kmercamel compute -k "$K" -u "$INPUT" > "$TEMP_DIR"/gg_raw.txt && ./kmercamel maskopt -u -t minrun -k "$K" "$TEMP_DIR"/gg_raw.txt > "$TEMP_DIR"/gg.txt"
-    /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
+if [[ "$MODE" == "runs" ]]; then
+    MASK_OPT="minrun"
+else
+    MASK_OPT="maxone"
+fi
 
+if [[ "$TEST_MODE" != *"S"* ]]; then
     if [[ "$TEST_MODE" == *"C"* ]]; then
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_c_time.txt \
-            ./kmercamel compute -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG"_c.txt
-        COMMAND="./kmercamel compute -k "$K" "$INPUT" > "$TEMP_DIR"/gg_c_raw.txt && ./kmercamel maskopt -t minrun -k "$K" "$TEMP_DIR"/gg_c_raw.txt > "$TEMP_DIR"/gg_c.txt"
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_c_time.txt /bin/sh -c "$COMMAND"
+        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt \
+            ./kmercamel compute -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG".txt
+        COMMAND="./kmercamel compute -k "$K" "$INPUT" > "$TEMP_DIR"/gg_raw.txt && ./kmercamel maskopt -t "$MASK_OPT" -k "$K" "$TEMP_DIR"/gg_raw.txt > "$TEMP_DIR"/gg.txt"
+        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
+    else
+        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt \
+            ./kmercamel compute -u -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG".txt
+        COMMAND="./kmercamel compute -k "$K" -u "$INPUT" > "$TEMP_DIR"/gg_raw.txt && ./kmercamel maskopt -u -t "$MASK_OPT" -k "$K" "$TEMP_DIR"/gg_raw.txt > "$TEMP_DIR"/gg.txt"
+        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
     fi
 fi
 
@@ -54,32 +60,37 @@ if [[ "$TEST_MODE" != *"F"* ]]; then
 fi
 
 if [[ "$TEST_MODE" == *"N"* ]]; then
-    O1="$(./scripts/count_noncomplement_kmers.py "$TEMP_DIR"/"$ALG".txt -k "$K")"
-    O2="$(./scripts/count_noncomplement_kmers.py "$TEMP_DIR"/gg.txt -k "$K")"
-    O3=""
-    O4=""
     if [[ "$TEST_MODE" == *"C"* ]]; then
-        O3="$(./scripts/count_kmers.py "$TEMP_DIR"/"$ALG"_c.txt -k "$K")"
-        O4="$(./scripts/count_kmers.py "$TEMP_DIR"/gg_c.txt -k "$K")"
+        O1="$(./scripts/count_kmers.py "$TEMP_DIR"/"$ALG".txt -k "$K")"
+        O2="$(./scripts/count_kmers.py "$TEMP_DIR"/gg.txt -k "$K")"
+    else
+        O1="$(./scripts/count_noncomplement_kmers.py "$TEMP_DIR"/"$ALG".txt -k "$K")"
+        O2="$(./scripts/count_noncomplement_kmers.py "$TEMP_DIR"/gg.txt -k "$K")"
     fi
 fi
 
-L1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | wc -m)"
-L2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | wc -m)"
-L3=""
-L4=""
 if [[ "$TEST_MODE" == *"C"* ]]; then
-    L3="$(cat "$TEMP_DIR"/"$ALG"_c.txt | tail -n 1 | wc -m)"
-    L4="$(cat "$TEMP_DIR"/gg_c.txt | tail -n 1 | wc -m)"
+    L1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | wc -m)"
+    L2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | wc -m)"
+else
+    L1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | wc -m)"
+    L2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | wc -m)"
 fi
 
-R1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
-R2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
-R3=""
-R4=""
 if [[ "$TEST_MODE" == *"C"* ]]; then      
-    R3="$(cat "$TEMP_DIR"/"$ALG"_c.txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
-    R4="$(cat "$TEMP_DIR"/gg_c.txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
+    R1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
+    R2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
+else
+    R1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
+    R2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | tr [a-z] '0' | tr -s '0' | tr -d [A-Z] | wc -m)"
+fi
+
+if [[ "$TEST_MODE" == *"C"* ]]; then      
+    Z1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | tr -d [A-Z] | wc -m)"
+    Z2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | tr -d [A-Z] | wc -m)"
+else
+    Z1="$(cat "$TEMP_DIR"/"$ALG".txt | tail -n 1 | tr -d [A-Z] | wc -m)"
+    Z2="$(cat "$TEMP_DIR"/gg.txt | tail -n 1 | tr -d [A-Z] | wc -m)"
 fi
 
 if [[ "$TEST_MODE" == *"F"* ]]; then
@@ -91,37 +102,30 @@ if [[ "$TEST_MODE" == *"F"* ]]; then
     fi
     printf " : "
 
-    printf "%d %d %s;" "$L1" "$R1" "$(cat "$TEMP_DIR"/"$ALG"_time.txt)"
-    printf "%d %d %s;" "$L2" "$R2" "$(cat "$TEMP_DIR"/gg_time.txt)"
-    if [[ "$TEST_MODE" == *"C"* ]]; then
-        printf "%d %d %s;" "$L3" "$R3" "$(cat "$TEMP_DIR"/"$ALG"_c_time.txt)"
-        printf "%d %d %s;" "$L4" "$R4" "$(cat "$TEMP_DIR"/gg_c_time.txt)"
-    fi
+    printf "%d %d %s;" "$L1" "$R1" "$Z1" "$(cat "$TEMP_DIR"/"$ALG"_time.txt)"
+    printf "%d %d %s;" "$L2" "$R2" "$Z2" "$(cat "$TEMP_DIR"/gg_time.txt)"
     printf "\n"
 else
     if [[ "$TEST_MODE" == *"N"* ]]; then
         echo kmers:
-        printf "% 10d\t"$ALG"\t% 10d (c)\n"   "$O1" "$O3"
-        printf "% 10d\tgg\t% 10d (c)\n"     "$O2" "$O4"
+        printf "% 10d\t"$ALG"\n"    "$O1"
+        printf "% 10d\tgg\n"        "$O2"
     fi
 
     echo lengths:
-    printf "% 10d\t"$ALG"\t% 10d (c)\n"   "$L1" "$L3"
-    printf "% 10d\tgg\t% 10d (c)\n"     "$L2" "$L4"
+    printf "% 10d\t"$ALG"\n"        "$L1"
+    printf "% 10d\tgg\n"            "$L2"
 
     echo runs:
-    printf "% 10d\t"$ALG"\t% 10d (c)\n"   "$R1" "$R3"
-    printf "% 10d\tgg\t% 10d (c)\n"     "$R2" "$R4"
+    printf "% 10d\t"$ALG"\n"        "$R1"
+    printf "% 10d\tgg\n"            "$R2"
+
+    echo zeros:
+    printf "% 10d\t"$ALG"\n"        "$Z1"
+    printf "% 10d\tgg\n"            "$Z2"
 
     echo resources - "$ALG":
     echo "$(cat "$TEMP_DIR"/"$ALG"_time.txt)"
     echo resources - gg:
     echo "$(cat "$TEMP_DIR"/gg_time.txt)"
-
-    if [[ "$TEST_MODE" == *"C"* ]]; then
-        echo "resources - "$ALG" (c)":
-        echo "$(cat "$TEMP_DIR"/"$ALG"_c_time.txt)"
-        echo "resources - gg (c)":
-        echo "$(cat "$TEMP_DIR"/gg_c_time.txt)"
-    fi
 fi
