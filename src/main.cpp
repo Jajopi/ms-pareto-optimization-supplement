@@ -152,12 +152,14 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             }
             else if (lower_bound) *of << LowerBoundLength(wrapper, kmer_type, simplitigs, k, complements);
             else Global(wrapper, kmer_type, simplitigs, *of, maskf, k, complements);
-        } else if (algorithm == ALG_JOINT){
+        } else if (algorithm == ALG_JOINT){ /// TODO use simplitigs?
             std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
             wrapper.kh_destroy_set(kMers);
-
-            if (lower_bound) *of << LowerBoundJoint(kMerVec, k, complements, objective);
-            else JointOptimization(kMerVec, *of, k, complements, objective);
+            if (lower_bound){
+                *of << LowerBoundJoint(std::move(kMerVec), k, complements, objective);
+            } else {
+                JointOptimization(std::move(kMerVec), *of, k, complements, objective);
+            }
         } else {
             Local(kMers, wrapper, kmer_type, *of, k, d_max, complements);
             WriteLog("Finished masked superstring computation.");
@@ -275,6 +277,9 @@ int camel_compute(int argc, char **argv) {
     } else if (assume_simplitigs && algorithm != "global") {
         std::cerr << "Optimization for the input being simplitigs is possible only with global." << std::endl;
         return usage_subcommand(subcommand);
+    } else if (algorithm != ALG_JOINT && objective.length() != 0){
+        std::cerr << "Option -O (objective) is only valid with 'joint' optimization algorithm." << std::endl;
+        return usage_subcommand(subcommand);
     } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
         std::cerr << "Joint optimization needs an objective: either -O runs or -O zeros." << std::endl;
         return usage_subcommand(subcommand);
@@ -361,9 +366,10 @@ int camel_lowerbound(int argc, char **argv) {
     std::ostream *of = &std::cout;
     bool complements = true;
     int opt;
+    std::string algorithm = "global";
     std::string objective = "";
     try {
-        while ((opt = getopt(argc, argv, "k:hux"))  != -1) {
+        while ((opt = getopt(argc, argv, "k:a:huxO:"))  != -1) {
             switch(opt) {
                 case 'k':
                     k = std::stoi(optarg);
@@ -373,6 +379,9 @@ int camel_lowerbound(int argc, char **argv) {
                 case 'h':
                     usage_subcommand(subcommand);
                     return 0;
+                case  'a':
+                    algorithm = optarg;
+                    break;
                 case 'x':
                     std::cerr << "Warning: The parameter -x currently has no effect due to the improvement in the underlying algorithm." <<std::endl;
                     break;
@@ -396,13 +405,19 @@ int camel_lowerbound(int argc, char **argv) {
     } else if (k < 0) {
         std::cerr << "k must be positive." << std::endl;
         return usage_subcommand(subcommand);
+    } else if (algorithm != ALG_JOINT && objective.length() != 0){
+        std::cerr << "Option -O (objective) is only valid with 'joint' optimization algorithm lowerbound computation." << std::endl;
+        return usage_subcommand(subcommand);
+    } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
+        std::cerr << "Joint optimization lowerbound needs an objective: either -O runs or -O zeros." << std::endl;
+        return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, "global", true, false, objective);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
     }
 }
 
