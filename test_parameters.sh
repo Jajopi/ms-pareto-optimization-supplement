@@ -44,17 +44,14 @@ if [[ -z "${MASK_OPT:-""}" ]]; then
 fi
 
 if [[ "$TEST_MODE" != *"S"* ]]; then
-    if [[ "$TEST_MODE" == *"C"* ]]; then
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt \
-            ./kmercamel compute -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG".txt
-        COMMAND="./kmercamel compute -k "$K" "$INPUT" > "$TEMP_DIR"/gg_raw.txt && ./kmercamel maskopt -t "$MASK_OPT" -k "$K" "$TEMP_DIR"/gg_raw.txt > "$TEMP_DIR"/gg.txt"
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
-    else
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt \
-            ./kmercamel compute -u -k "$K" -a "$ALG" -O "$MODE" "$INPUT" > "$TEMP_DIR"/"$ALG".txt
-        COMMAND="./kmercamel compute -k "$K" -u "$INPUT" > "$TEMP_DIR"/gg_raw.txt && ./kmercamel maskopt -u -t "$MASK_OPT" -k "$K" "$TEMP_DIR"/gg_raw.txt > "$TEMP_DIR"/gg.txt"
-        /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
-    fi
+    if [[ "$TEST_MODE" == *"C"* ]]; then COMPL=""; else COMPL="-u"; fi
+
+    COMMAND="./kmercamel compute -k $K $COMPL -a $ALG -O $MODE $INPUT > $TEMP_DIR/$ALG.txt"
+    /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/"$ALG"_time.txt /bin/sh -c "$COMMAND"
+
+    COMMAND="./kmercamel compute -k $K $COMPL $INPUT > $TEMP_DIR/gg_raw.txt && \
+            ./kmercamel maskopt -t $MASK_OPT -k $K $COMPL $TEMP_DIR/gg_raw.txt > $TEMP_DIR/gg.txt"
+    /usr/bin/time -f "$TIME_FORMAT_STRING" -o "$TEMP_DIR"/gg_time.txt /bin/sh -c "$COMMAND"
 fi
 
 # if [[ "$TEST_MODE" == *"N"* ]]; then
