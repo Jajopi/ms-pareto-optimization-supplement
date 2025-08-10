@@ -387,6 +387,8 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
             if (!skipped_unused) no_unused[leaf_index] = chain_depth;
         }
 
+        /// Append into stack
+        if (priority == 0) continue;
         push_failure_node_into_stack(priority, chain_depth, last_leaf, last_leaf); /// Add failure of current node
 
         for (size_n_max i = leaf_index; i < N && leaf_prefix == BitPrefix(kMers[i], K, chain_depth); ++i){
@@ -415,7 +417,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
             }
 
             previous[i] = last_leaf;
-            push_failure_node_into_stack(priority, K, i, i); /// Add failure of that leaf
+            push_failure_node_into_stack(priority, K, i, i); /// Add failure of leaf i
         }
     }
 
@@ -428,7 +430,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::push_failure
 
     size_k_max failure_depth = node_depth - 1;
     size_n_max failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
-    priority--;
+    if (--priority == 0) return;
 
     while (failure_index == INVALID_NODE){
         if (--failure_depth == 0) return;
@@ -436,9 +438,6 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::push_failure
 
         failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
     }
-
-    // if (priority < node_depth - failure_depth) return;
-    // priority -= (node_depth - failure_depth);
 
     if constexpr (OBJECTIVE == JointObjective::RUNS){
         if (node_depth == K - 1 || (node_depth == K && failure_depth < K - 1)){ /// Run will be interrupted
