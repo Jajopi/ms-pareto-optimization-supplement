@@ -1,15 +1,11 @@
 #pragma once
 
 #include <vector>
-#include <iostream>
-#include <unordered_map>
-#include <list>
 #include <algorithm>
-#include <cstdint>
-#include <limits>
 
 #include "kmers.h"
 #include "parser.h"
+#include "joint_objective.h"
 #include "joint_loac.h"
 
 template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
@@ -27,21 +23,19 @@ void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, si
         bool complements, JointObjective objective){
 
     if (objective == JointObjective::RUNS){
-        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS,  true>(kMers, size_n_max(k), 7), of);
-        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS, false>(kMers, size_n_max(k), 7), of);
-    }
-    else if (objective == JointObjective::ZEROS){
-        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS,  true>(kMers, size_n_max(k), 2), of);
-        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), 2), of);
-    }
-    else {
+        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS,  true>(kMers, size_n_max(k), DEFAULT_PENALTY_RUNS),  of);
+        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS, false>(kMers, size_n_max(k), DEFAULT_PENALTY_RUNS),  of);
+    } else if (objective == JointObjective::ZEROS){
+        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS,  true>(kMers, size_n_max(k), DEFAULT_PENALTY_ZEROS), of);
+        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), DEFAULT_PENALTY_ZEROS), of);
+    } else {
         throw std::invalid_argument("Invalid objective function specified");
-    }    
+    }
 }
 
 /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
 template <typename kmer_t>
-size_t RemoveDuplicateKmers(std::vector<kmer_t> & sorted_kMerVec, bool even_k){
+size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
     size_t size_limit = sorted_kMerVec.size() - (even_k ? 2 : 1);
     size_t removed = 0;
     for (size_t i = 0; i < size_limit; ++i){
@@ -61,16 +55,13 @@ size_t RemoveDuplicateKmers(std::vector<kmer_t> & sorted_kMerVec, bool even_k){
 /// If complements are provided, treat k-mer and its complement as identical.
 /// If this is the case, k-mers are expected not to contain both k-mer and its complement.
 template <typename kmer_t>
-void JointOptimization(std::vector<kmer_t>& kMerVec, std::ostream& of, int k, bool complements, std::string objective_string){
+void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, int k, bool complements, std::string objective_string){
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");
         }
 
-        JointObjective objective;
-        if (objective_string == "zeros")     objective = JointObjective::ZEROS;
-        else if (objective_string == "runs") objective = JointObjective::RUNS;
-        else throw std::invalid_argument("Wrong objective provided");
+        JointObjective objective = GetJointObjective(objective_string);
 
         if (complements){
             /// Add complementary k-mers.

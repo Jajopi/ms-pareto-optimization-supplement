@@ -3,20 +3,12 @@
 #include <vector>
 #include <algorithm>
 #include <limits>
-#include <iostream>
-#include <iomanip>
-#include <unordered_map>
 #include <random>
-#include <queue>
 
 #include "kmers.h"
 #include "parser.h"
-
-enum JointObjective {
-    RUNS, ZEROS
-};
-
-typedef uint8_t size_k_max;
+#include "joint_objective.h"
+#include "joint_index.h"
 
 constexpr size_t RANDOM_SEED = 0;
 constexpr size_t MAX_COUNT_WIDTH = 12;
@@ -59,84 +51,6 @@ public:
     inline size_n_max count() const { return component_count; };
 };
 
-
-/// Index for fast searching of k-mers
-/// Search operation returns std::numeric_limits<size_n_max>::max() when k-mer is not present in the set
-template<typename kmer_t, typename size_n_max>
-class FailureIndex {
-    static constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
-
-    const std::vector<kmer_t> &kMers;
-    size_n_max N;
-    size_k_max K;
-
-    size_k_max SPEEDUP_DEPTH;
-    std::vector<size_n_max> search_speedup;
-
-    std::vector<size_n_max> first_row;
-
-    inline void construct_index(){
-        N = kMers.size();
-        SPEEDUP_DEPTH = log2(N) / 2;
-        size_n_max speedup_size = (size_n_max(1) << 2 * SPEEDUP_DEPTH);
-        search_speedup.resize(speedup_size + 1);
-
-        size_n_max index = 0;
-        for (kmer_t k = 0; k < kmer_t(speedup_size); ++k){
-            search_speedup[k] = index;
-            while (index < N && BitPrefix(kMers[index], K, SPEEDUP_DEPTH) == k) ++index;
-        }
-        search_speedup[speedup_size] = N;
-
-        first_row.resize(N);
-        for (size_n_max i = 0; i < N; ++i) first_row[i] = search(i, K - 1);
-    }
-
-    inline size_n_max search(size_n_max index, size_k_max depth){
-        kmer_t searched = BitSuffix(kMers[index], depth);
-
-        if (depth < SPEEDUP_DEPTH){
-            size_n_max begin = search_speedup[searched << 2 * (SPEEDUP_DEPTH - depth)];
-            return (BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
-        }
-        
-        kmer_t speedup_index = BitPrefix(searched, depth, SPEEDUP_DEPTH);
-        size_n_max begin = search_speedup[speedup_index];
-        size_n_max end = search_speedup[speedup_index + 1];
-
-        /// Switch to bin-search on big intervals
-        if (end - begin > 16){
-            while (begin < end){
-                size_n_max middle = (begin + end - 1) / 2;
-                kmer_t current = BitPrefix(kMers[middle], K, depth);
-
-                if (current < searched) begin = middle + 1;
-                else end = middle;
-            }
-            return (BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
-        }
-
-        for (size_n_max i = begin; i < end; ++i){
-            kmer_t current = BitPrefix(kMers[i], K, depth);
-            if (current == searched) return i;
-            if (current > searched) return INVALID_NODE;
-        }
-        return INVALID_NODE;
-    }
-public:
-    inline FailureIndex(const std::vector<kmer_t> &kmers, size_k_max k) :
-            kMers(kmers), N(kmers.size()), K(k) {
-        construct_index();
-        WriteLog("Finished constructing index.");
-    }
-
-    inline size_n_max find_first_failure_leaf(size_n_max index, size_k_max depth){
-        if (depth == K - 1) return first_row[index];
-        return search(index, depth);
-    }
-};
-
-
 /// The data structure for efficient heuristic search
 template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
 class LeafOnlyAC {
@@ -146,14 +60,15 @@ class LeafOnlyAC {
     size_n_max N;               /// Number of k-mers (number of leaves)
     size_k_max PENALTY;         /// Value of penalty (for runs / zeros) used in the computation
     
-    std::vector<kmer_t> kMers;  /// Sorted leaves
+    std::vector<kmer_t>& kMers;  /// Sorted leaves
     FailureIndex<kmer_t, size_n_max> failureIndex;
+    UnionFind<size_n_max>   components;
     
     std::vector<size_n_max> complements;
-    UnionFind<size_n_max>   components;
     std::vector<size_n_max> backtracks;
     std::vector<size_n_max> backtrack_indexes;
     std::vector<size_n_max> previous;
+    // std::vector<size_n_max> bridging_kmers;
     std::vector<size_n_max> next;
     std::vector<size_k_max> remaining_priorities;
     std::vector<size_n_max> skip_to;
@@ -170,12 +85,8 @@ class LeafOnlyAC {
 public:
     std::ostream& LOG_STREAM = std::cerr;
 
-    LeafOnlyAC(const std::vector<kmer_t>& kmers, size_k_max k, size_k_max penalty) :
+    LeafOnlyAC(std::vector<kmer_t>& kmers, size_k_max k, size_k_max penalty) :
         K(k), N(kmers.size()), PENALTY(penalty), kMers(kmers), failureIndex(kMers, K) {
-            if constexpr(COMPLEMENTS) construct_complements();
-        };
-    LeafOnlyAC(std::vector<kmer_t>&& kmers, size_k_max k, size_k_max penalty) :
-        K(k), N(kmers.size()), PENALTY(penalty), kMers(std::move(kmers)), failureIndex(kMers, K) {
             if constexpr(COMPLEMENTS) construct_complements();
         };
 
@@ -263,8 +174,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
                 if (result){
                     next_preffered_leaf = next[leaf_index];
                 }
-            }
-            else {
+            } else {
                 if (leaf_index == INVALID_NODE) continue;
                 if (next[leaf_index] != INVALID_NODE){
                     uncompleted_leaves[i] = INVALID_NODE;
@@ -410,8 +320,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
                 }
                 remaining_priorities[i] = priority;
                 if (remaining_priorities[skip_to[i]] < priority) skip_to[i] = i + 1;
-            }
-            else {
+            } else {
                 if (remaining_priorities[i] >= priority) continue;
                 remaining_priorities[i] = priority;
             }
