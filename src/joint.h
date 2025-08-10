@@ -31,8 +31,8 @@ void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, si
         else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS, false>(kMers, size_n_max(k), 7), of);
     }
     else if (objective == JointObjective::ZEROS){
-        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS,  true>(kMers, size_n_max(k), 7), of);
-        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), 7), of);
+        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS,  true>(kMers, size_n_max(k), 2), of);
+        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), 2), of);
     }
     else {
         throw std::invalid_argument("Invalid objective function specified");
@@ -68,7 +68,7 @@ void JointOptimization(std::vector<kmer_t>& kMerVec, std::ostream& of, int k, bo
         }
 
         JointObjective objective;
-        if (objective_string == "zeros") objective = JointObjective::ZEROS;
+        if (objective_string == "zeros")     objective = JointObjective::ZEROS;
         else if (objective_string == "runs") objective = JointObjective::RUNS;
         else throw std::invalid_argument("Wrong objective provided");
 
@@ -77,7 +77,7 @@ void JointOptimization(std::vector<kmer_t>& kMerVec, std::ostream& of, int k, bo
             size_t n = kMerVec.size();
             kMerVec.resize(n * 2);
             for (size_t i = 0; i < n; ++i) kMerVec[i + n] = ReverseComplement(kMerVec[i], k);
-            WriteLog("Finshed adding complements.");
+            WriteLog("Finished adding complements.");
         }
 
         /// Sort k-mers

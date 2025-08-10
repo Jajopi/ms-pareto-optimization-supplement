@@ -150,16 +150,16 @@ class LeafOnlyAC {
     FailureIndex<kmer_t, size_n_max> failureIndex;
     
     std::vector<size_n_max> complements;
-    UnionFind<size_n_max> components;
-    std::vector<std::tuple<size_k_max, size_k_max, size_n_max, size_n_max>> stack;
+    UnionFind<size_n_max>   components;
     std::vector<size_n_max> backtracks;
     std::vector<size_n_max> backtrack_indexes;
     std::vector<size_n_max> previous;
     std::vector<size_n_max> next;
     std::vector<size_k_max> remaining_priorities;
     std::vector<size_n_max> skip_to;
-    std::vector<bool> used;
+    std::vector<bool>       used;
     std::vector<size_k_max> no_unused;
+    std::vector<std::tuple<size_k_max, size_k_max, size_n_max, size_n_max>> stack;
 
     bool try_complete_leaf(size_n_max leaf_to_connect, size_k_max priority_drop_limit);
     void push_failure_node_into_stack(size_k_max priority, size_k_max node_depth, size_n_max node_index, size_n_max last_leaf);
@@ -209,7 +209,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
     if (RESULT_COMPUTED){
         throw std::invalid_argument("Result has already been computed.");
     }
-    size_n_max SEARCH_CUTOFF = 1;
+    size_n_max SEARCH_CUTOFF = N / (1 << 18);
 
     components = UnionFind(N);
     backtracks.reserve(N); /// Chains for leaves where backtracking is needed
@@ -227,8 +227,9 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
     std::shuffle(uncompleted_leaves.begin(), uncompleted_leaves.end(), std::default_random_engine(RANDOM_SEED));
     size_n_max next_preffered_leaf = INVALID_NODE;
     
-    size_k_max max_priority_drop = (K - 1) + PENALTY;
-    // size_k_max max_priority_drop = (K - 1);
+    size_k_max max_priority_drop;
+    if constexpr (OBJECTIVE == JointObjective::RUNS)  max_priority_drop = (K - 1) + PENALTY;
+    if constexpr (OBJECTIVE == JointObjective::ZEROS) max_priority_drop = (K - 1) * (PENALTY + 1);
     
     size_n_max remaining_iterations = max_priority_drop;
     LOG_STREAM << std::setw(MAX_COUNT_WIDTH) << N << ' ' << std::setw(MAX_ITERS_WIDTH) << remaining_iterations << std::endl;
@@ -263,7 +264,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
                     next_preffered_leaf = next[leaf_index];
                 }
             }
-            else{
+            else {
                 if (leaf_index == INVALID_NODE) continue;
                 if (next[leaf_index] != INVALID_NODE){
                     uncompleted_leaves[i] = INVALID_NODE;
@@ -344,10 +345,10 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
 
     while (!stack.empty()){
         auto t = stack.back(); stack.pop_back();
-        size_k_max priority = std::get<0>(t);
+        size_k_max priority    = std::get<0>(t);
         size_k_max chain_depth = std::get<1>(t);
-        size_n_max leaf_index = std::get<2>(t);
-        size_n_max last_leaf = std::get<3>(t);
+        size_n_max leaf_index  = std::get<2>(t);
+        size_n_max last_leaf   = std::get<3>(t);
 
         size_n_max leaf_complement;
         if constexpr (COMPLEMENTS) leaf_complement = complements[leaf_to_complete];
@@ -386,6 +387,8 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
             if (!skipped_unused) no_unused[leaf_index] = chain_depth;
         }
 
+        push_failure_node_into_stack(priority, chain_depth, last_leaf, last_leaf); /// Add failure of current node
+
         for (size_n_max i = leaf_index; i < N && leaf_prefix == BitPrefix(kMers[i], K, chain_depth); ++i){
             if (i == leaf_to_complete) continue;
 
@@ -414,8 +417,6 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
             previous[i] = last_leaf;
             push_failure_node_into_stack(priority, K, i, i); /// Add failure of that leaf
         }
-
-        push_failure_node_into_stack(priority, chain_depth, last_leaf, last_leaf); /// Add failure of current node
     }
 
     return false;
@@ -426,28 +427,28 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::push_failure
     size_k_max priority, size_k_max node_depth, size_n_max node_index, size_n_max last_leaf){
 
     size_k_max failure_depth = node_depth - 1;
-    size_n_max failure_index = INVALID_NODE;
+    size_n_max failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
+    priority--;
 
-    while (failure_depth != 0){
+    while (failure_index == INVALID_NODE){
+        if (--failure_depth == 0) return;
+        if (--priority == 0) return;
+
         failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
-        
-        if (failure_index != INVALID_NODE) break;
-        --failure_depth;
     }
-    if (failure_depth == 0) return;
+
+    // if (priority < node_depth - failure_depth) return;
+    // priority -= (node_depth - failure_depth);
 
     if constexpr (OBJECTIVE == JointObjective::RUNS){
-        if (priority < node_depth - failure_depth) return;
-        priority -= (node_depth - failure_depth);
-
         if (node_depth == K - 1 || (node_depth == K && failure_depth < K - 1)){ /// Run will be interrupted
             if (priority < PENALTY) return;
             priority -= PENALTY;
         }
     }
     if constexpr (OBJECTIVE == JointObjective::ZEROS){
-        if (priority < (node_depth - failure_depth) * (1 + PENALTY) - 1) return;
-        priority -= (node_depth - failure_depth) * (1 + PENALTY) - 1;
+        if (priority < (node_depth - failure_depth - (node_depth == K)) * PENALTY) return;
+        priority -= (node_depth - failure_depth - (node_depth == K)) * PENALTY;
     }
 
     stack.emplace_back(priority, failure_depth, failure_index, last_leaf);
@@ -526,7 +527,7 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::print_
 
             last_kmer = actual_kmer;
             total_objective_value += K - ov;
-            if constexpr (OBJECTIVE == JointObjective::RUNS) if (ov < K - 1) total_objective_value += PENALTY;
+            if constexpr (OBJECTIVE == JointObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
             if constexpr (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
 
             if (backtrack_indexes[actual] != INVALID_NODE){
@@ -540,7 +541,7 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::print_
 
                     last_kmer = actual_kmer;
                     total_objective_value += K - ov;
-                    if constexpr (OBJECTIVE == JointObjective::RUNS) if (ov < K - 1) total_objective_value += PENALTY;
+                    if constexpr (OBJECTIVE == JointObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
                     if constexpr (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
 
                     --backtrack_index;
@@ -554,7 +555,7 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::print_
     }
     PrintKmerMasked(last_kmer, K, of, K);
     total_objective_value += K;
-    if constexpr (OBJECTIVE == JointObjective::RUNS) total_objective_value += PENALTY; /// First run of ones
+    if constexpr (OBJECTIVE == JointObjective::RUNS)  total_objective_value += PENALTY;           /// First run of ones
     if constexpr (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1); /// Zeros at the end
 
     return total_objective_value;
