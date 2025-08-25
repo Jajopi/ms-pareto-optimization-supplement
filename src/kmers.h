@@ -153,3 +153,10 @@ size_k_max GetMaxOverlapLength(kmer_t kmer1, kmer_t kmer2, size_k_max k){
     }
     return 0;
 }
+
+template<typename kmer_t, typename size_k_max>
+void AddComplements(std::vector<kmer_t>& kMerVec, size_k_max k){
+    size_t n = kMerVec.size();
+    kMerVec.resize(n * 2);
+    for (size_t i = 0; i < n; ++i) kMerVec[i + n] = ReverseComplement(kMerVec[i], k);
+}

@@ -5,51 +5,14 @@
 #include <limits>
 #include <random>
 
-#include "kmers.h"
-#include "parser.h"
-#include "joint_objective.h"
-#include "joint_index.h"
+#include "../kmers.h"
+#include "../joint/objective.h"
+#include "../joint/index.h"
+#include "../joint/unionfind.h"
 
 constexpr size_t RANDOM_SEED = 0;
 constexpr size_t MAX_COUNT_WIDTH = 12;
 constexpr size_t MAX_ITERS_WIDTH = 3;
-
-/// Union-find with non-comutative union operation
-template<typename size_n_max>
-class UnionFind {
-    std::vector<size_n_max> roots;
-    size_n_max component_count;
-public:
-    UnionFind(size_n_max size) : roots(size), component_count(size) {
-        for (size_n_max i = 0; i < size; ++i) roots[i] = i;
-    };
-    UnionFind() = default;
-    
-    inline size_n_max find(size_n_max x) {
-        size_n_max root = roots[x];
-        if (roots[root] == root) return root;
-
-        while (roots[root] != root) root = roots[root];
-        while (x != root){
-            size_n_max new_x = roots[x];
-            roots[x] = root;
-            x = new_x;
-        }
-        return root;
-    }
-
-    inline bool are_connected(size_n_max x, size_n_max y){
-        return find(x) == find(y);
-    }
-
-    inline void connect(size_n_max to, size_n_max from){ // Second one points to the first one - points to the begining of a chain
-        if (are_connected(from, to)) return;
-        roots[from] = to;
-        --component_count;
-    }
-
-    inline size_n_max count() const { return component_count; };
-};
 
 /// The data structure for efficient heuristic search
 template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
@@ -146,9 +109,12 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::compute_resu
     LOG_STREAM << std::setw(MAX_COUNT_WIDTH) << N << ' ' << std::setw(MAX_ITERS_WIDTH) << remaining_iterations << std::endl;
     LOG_STREAM << std::setw(MAX_COUNT_WIDTH) << N << ' ' << std::setw(MAX_ITERS_WIDTH) << remaining_iterations; LOG_STREAM.flush();
 
+    size_k_max bigger_step;
+    if constexpr (OBJECTIVE == JointObjective::RUNS)  bigger_step = 1;
+    if constexpr (OBJECTIVE == JointObjective::ZEROS) bigger_step = PENALTY;
     for (size_k_max priority_drop_limit = 1;
         priority_drop_limit <= max_priority_drop;
-        ++priority_drop_limit){
+        priority_drop_limit += (priority_drop_limit <= K) ? 1 : bigger_step){
             size_n_max uncompleted_leaf_count = uncompleted_leaves.size();
 
             for (size_k_max x = 0; x < MAX_COUNT_WIDTH + 1 + MAX_ITERS_WIDTH; ++x) LOG_STREAM << '\b';
@@ -220,7 +186,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::try_complete
         size_n_max leaf_to_complete, size_k_max priority_drop_limit) {
 
     if (priority_drop_limit == 1){
-        size_n_max first_failure_leaf = failureIndex.find_first_failure_leaf(leaf_to_complete, K - 1);
+        size_n_max first_failure_leaf = failureIndex.find_first_failure_leaf_by_index(leaf_to_complete, K - 1);
 
         if (first_failure_leaf == INVALID_NODE){
             return false;
@@ -338,14 +304,14 @@ inline void LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>::push_failure
     size_k_max priority, size_k_max node_depth, size_n_max node_index, size_n_max last_leaf){
 
     size_k_max failure_depth = node_depth - 1;
-    size_n_max failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
+    size_n_max failure_index = failureIndex.find_first_failure_leaf_by_index(node_index, failure_depth);
     if (--priority == 0) return;
 
     while (failure_index == INVALID_NODE){
         if (--failure_depth == 0) return;
         if (--priority == 0) return;
 
-        failure_index = failureIndex.find_first_failure_leaf(node_index, failure_depth);
+        failure_index = failureIndex.find_first_failure_leaf_by_index(node_index, failure_depth);
     }
 
     if constexpr (OBJECTIVE == JointObjective::RUNS){

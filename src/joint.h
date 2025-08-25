@@ -5,8 +5,8 @@
 
 #include "kmers.h"
 #include "parser.h"
-#include "joint_objective.h"
-#include "joint_loac.h"
+#include "joint/objective.h"
+#include "joint/loac.h"
 
 template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
 void compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>&& loac, std::ostream& of){
@@ -19,7 +19,7 @@ void compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>&& 
 
 /// The joint optimization process
 template <typename kmer_t, typename size_n_max>
-void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, size_t k,
+void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, size_k_max k,
         bool complements, JointObjective objective){
 
     if (objective == JointObjective::RUNS){
@@ -55,7 +55,7 @@ size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
 /// If complements are provided, treat k-mer and its complement as identical.
 /// If this is the case, k-mers are expected not to contain both k-mer and its complement.
 template <typename kmer_t>
-void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, int k, bool complements, std::string objective_string){
+void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string){
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");
@@ -63,18 +63,13 @@ void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, int k, b
 
         JointObjective objective = GetJointObjective(objective_string);
 
-        if (complements){
-            /// Add complementary k-mers.
-            size_t n = kMerVec.size();
-            kMerVec.resize(n * 2);
-            for (size_t i = 0; i < n; ++i) kMerVec[i + n] = ReverseComplement(kMerVec[i], k);
-            WriteLog("Finished adding complements.");
-        }
+        if (complements) AddComplements(kMerVec, k);
+        WriteLog("Finished adding complements.");
 
-        /// Sort k-mers
         std::sort(kMerVec.begin(), kMerVec.end());
         WriteLog("Finished sorting k-mers.");
 
+        /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
         /// Skipping this step as input data are nice
         // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
 

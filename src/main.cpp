@@ -13,7 +13,6 @@
 #include "streaming.h"
 #include "khash_utils.h"
 #include "conversions.h"
-#include "joint.h"
 
 #include <iostream>
 #include <string>
@@ -21,6 +20,7 @@
 #include "version.h"
 #include "masks.h"
 #include "lower_bound.h"
+#include "joint.h"
 
 int usage() {
     std::cerr << std::endl;
@@ -83,6 +83,13 @@ int usage_subcommand(std::string subcommand) {
     std::cerr << "  -m FILE  - output file with mask" << std::endl;
     std::cerr << "  -s FILE  - output file with superstring" << std::endl;
     }
+
+    if (subcommand == "compute"){
+    std::cerr << "  -O STR   - objective for joint optimization, either 'runs' or zeros'" << std::endl;
+    } else if (subcommand == "lowerbound"){
+    std::cerr << "  -O STR   - objective, either 'runs' or 'zeros' for joint optimization, or 'matchtig-count'" << std::endl;
+    }
+
     std::cerr << "  -h       - print help" << std::endl;
     std::cerr << std::endl;
     return 1;
@@ -106,6 +113,15 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         if (ret) usage_subcommand("maskopt");
         WriteLog("Finished optimization.");
         return ret;
+    }
+
+    if (lower_bound && objective == "matchtig-count"){
+        auto *kMers = wrapper.kh_init_set();
+        std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
+        std::cerr << kh_size(kMers) << std::endl;
+        wrapper.kh_destroy_set(kMers);
+        *of << LowerBoundMatchtigsCount(std::move(kMerVec), k, complements) << std::endl;
+        return 0;
     }
 
     if (!lower_bound) WriteLog("Started computation of a masked superstring from '" + path + "'.");
@@ -208,7 +224,7 @@ int camel_compute(int argc, char **argv) {
     bool d_set = false;
     bool assume_simplitigs = false;
     int opt;
-    std::string objective = "";
+    std::string objective = ""; /// Possible: runs, zeros
     try {
         while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:"))  != -1) {
             switch(opt) {
@@ -367,7 +383,7 @@ int camel_lowerbound(int argc, char **argv) {
     bool complements = true;
     int opt;
     std::string algorithm = "global";
-    std::string objective = "";
+    std::string objective = ""; /// Possible: runs, zeros, matchtig-count
     try {
         while ((opt = getopt(argc, argv, "k:a:huxO:"))  != -1) {
             switch(opt) {
@@ -405,8 +421,8 @@ int camel_lowerbound(int argc, char **argv) {
     } else if (k < 0) {
         std::cerr << "k must be positive." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm != ALG_JOINT && objective.length() != 0){
-        std::cerr << "Option -O (objective) is only valid with 'joint' optimization algorithm lowerbound computation." << std::endl;
+    } else if (objective.length() != 0 && algorithm != ALG_JOINT && objective != "matchtig-count"){
+        std::cerr << "Option -O (objective) is only valid with 'matchtig-count' objective or 'joint' optimization algorithm." << std::endl;
         return usage_subcommand(subcommand);
     } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
         std::cerr << "Joint optimization lowerbound needs an objective: either -O runs or -O zeros." << std::endl;
