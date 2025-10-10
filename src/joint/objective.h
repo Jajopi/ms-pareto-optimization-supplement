@@ -1,6 +1,6 @@
 #pragma once
 
-typedef uint8_t size_k_max;
+typedef uint16_t size_k_max;
 
 enum JointObjective {
     RUNS, ZEROS

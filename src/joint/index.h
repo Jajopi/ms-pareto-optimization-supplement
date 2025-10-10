@@ -2,9 +2,9 @@
 
 #include <vector>
 
-typedef uint8_t size_k_max;
+#include "objective.h"
 
-/// Index for fast searching of k-mers
+/// Index for fast retrieval of first failure node of given leaf and depth present in the set
 /// Search operation returns std::numeric_limits<size_n_max>::max() when k-mer is not present in the set
 template<typename kmer_t, typename size_n_max>
 class FailureIndex {

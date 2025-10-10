@@ -21,7 +21,7 @@ size_t LowerBoundLength(kh_wrapper_t wrapper, kmer_t kmer_type, std::vector<simp
 }
 
 template <typename kmer_t>
-size_t LowerBoundMatchtigsCount(std::vector<kmer_t>&& kMerVec, size_k_max k, bool complements) {
+size_t LowerBoundMatchtigCount(std::vector<kmer_t>&& kMerVec, size_k_max k, bool complements) {
     typedef size_t size_n_max;
 
     if (complements) AddComplements(kMerVec, k);

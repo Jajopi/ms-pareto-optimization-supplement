@@ -35,7 +35,7 @@ int usage() {
     std::cerr << "    mssep2ms   - Join a masked superstring from a superstring and a mask." << std::endl;
     std::cerr << "    ms2spss    - Compute rSPSS from a masked superstring (may be of much larger total length)." << std::endl;
     std::cerr << "    spss2ms    - Compute masked superstring corresponding to (r)SPSS." << std::endl;
-    std::cerr << "    lowerbound - Compute the lower bound on masked superstring size of a k-mer set." << std::endl;
+    std::cerr << "    lowerbound - Compute the lower bound on masked superstring length or the number of runs of ones in the mask." << std::endl;
     std::cerr << std::endl;
     return 1;
 }
@@ -120,7 +120,7 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
         std::cerr << kh_size(kMers) << std::endl;
         wrapper.kh_destroy_set(kMers);
-        *of << LowerBoundMatchtigsCount(std::move(kMerVec), k, complements) << std::endl;
+        *of << LowerBoundMatchtigCount(std::move(kMerVec), k, complements) << std::endl;
         return 0;
     }
 
@@ -383,7 +383,7 @@ int camel_lowerbound(int argc, char **argv) {
     bool complements = true;
     int opt;
     std::string algorithm = "global";
-    std::string objective = ""; /// Possible: runs, zeros, matchtig-count
+    std::string objective = "length"; /// Possible: length, matchtig-count, runs, zeros
     try {
         while ((opt = getopt(argc, argv, "k:a:huxO:"))  != -1) {
             switch(opt) {
@@ -421,11 +421,19 @@ int camel_lowerbound(int argc, char **argv) {
     } else if (k < 0) {
         std::cerr << "k must be positive." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (objective.length() != 0 && algorithm != ALG_JOINT && objective != "matchtig-count"){
-        std::cerr << "Option -O (objective) is only valid with 'matchtig-count' objective or 'joint' optimization algorithm." << std::endl;
-        return usage_subcommand(subcommand);
-    } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
-        std::cerr << "Joint optimization lowerbound needs an objective: either -O runs or -O zeros." << std::endl;
+    } else if (objective.length() != 0){
+        if (algorithm != "global" && algorithm != ALG_JOINT){
+            std::cerr << "Only valid options for algorithm are 'global' (default) of 'joint." << std::endl;
+            return usage_subcommand(subcommand);
+        } else if (algorithm == ALG_JOINT && objective != "runs" && objective != "zeros"){
+            std::cerr << "For joint optimization lowerbound, only valid objectives are 'runs' or 'zeros'." << std::endl;
+            return usage_subcommand(subcommand);
+        } else if (algorithm == "global" && objective != "length" && objective != "matchtig-count"){
+            std::cerr << "For global algorithm lowerbound, only valid objectives are 'length' (default) or 'matchtig-count'." << std::endl;
+            return usage_subcommand(subcommand);
+        }
+    } else if (algorithm == ALG_JOINT && objective != "runs" && objective != "zeros"){
+        std::cerr << "Joint optimization lowerbound needs an objective: either 'runs' or 'zeros'." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {

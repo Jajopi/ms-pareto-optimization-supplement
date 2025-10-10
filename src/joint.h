@@ -8,32 +8,19 @@
 #include "joint/objective.h"
 #include "joint/loac.h"
 
-template <typename kmer_t, typename size_n_max, JointObjective OBJECTIVE, bool COMPLEMENTS>
-void compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, OBJECTIVE, COMPLEMENTS>&& loac, std::ostream& of){
-    loac.compute_result();
-    loac.optimize_result(); // TODO add parameters
-    size_t objective = loac.print_result(of);
-
-    WriteLog("Finished joint optimization of masked superstring, resulting objective: " + std::to_string(objective) + ".");
-}
-
 /// The joint optimization process
 template <typename kmer_t, typename size_n_max>
-void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, size_k_max k,
-        bool complements, JointObjective objective){
+void compute_joint_optimization(std::vector<kmer_t>& kMers, std::ostream& of, size_k_max k, bool complements, JointObjective objective, size_k_max penalty){
+    auto loac = LeafOnlyAC<kmer_t, size_n_max>(kMers, size_n_max(k), complements, objective, penalty);
+    loac.compute_result();
+    loac.optimize_result(); // TODO add parameters
+    size_t total_objective_value = loac.print_result(of);
 
-    if (objective == JointObjective::RUNS){
-        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS,  true>(kMers, size_n_max(k), DEFAULT_PENALTY_RUNS),  of);
-        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max,  JointObjective::RUNS, false>(kMers, size_n_max(k), DEFAULT_PENALTY_RUNS),  of);
-    } else if (objective == JointObjective::ZEROS){
-        if (complements) compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS,  true>(kMers, size_n_max(k), DEFAULT_PENALTY_ZEROS), of);
-        else             compute_with_loac(LeafOnlyAC<kmer_t, size_n_max, JointObjective::ZEROS, false>(kMers, size_n_max(k), DEFAULT_PENALTY_ZEROS), of);
-    } else {
-        throw std::invalid_argument("Invalid objective function specified");
-    }
+    WriteLog("Finished joint optimization of masked superstring, resulting objective value: " + std::to_string(total_objective_value) + ".");
 }
 
 /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
+/// Not used at the moment
 template <typename kmer_t>
 size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
     size_t size_limit = sorted_kMerVec.size() - (even_k ? 2 : 1);
@@ -55,19 +42,26 @@ size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
 /// If complements are provided, treat k-mer and its complement as identical.
 /// If this is the case, k-mers are expected not to contain both k-mer and its complement.
 template <typename kmer_t>
-void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string){
+void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string, size_k_max penalty = 0){
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");
         }
 
+        /// Parse the objective
         JointObjective objective = GetJointObjective(objective_string);
+        /// Get penalty
+        if (penalty == 0){
+            if (objective == JointObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;
+            if (objective == JointObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
+            WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
+        }
 
+        /// Add complements
         if (complements) AddComplements(kMerVec, k);
-        WriteLog("Finished adding complements.");
 
+        /// Sort kmers
         std::sort(kMerVec.begin(), kMerVec.end());
-        WriteLog("Finished sorting k-mers.");
 
         /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
         /// Skipping this step as input data are nice
@@ -75,11 +69,11 @@ void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_m
 
         size_t limit = kMerVec.size();
         if      (limit <= (size_t(1) << 15))
-            compute_joint_optimization<kmer_t, uint16_t>(kMerVec, of, k, complements, objective);
+            compute_joint_optimization<kmer_t, uint16_t>(kMerVec, of, k, complements, objective, penalty);
         else if (limit <= (size_t(1) << 31))
-            compute_joint_optimization<kmer_t, uint32_t>(kMerVec, of, k, complements, objective);
+            compute_joint_optimization<kmer_t, uint32_t>(kMerVec, of, k, complements, objective, penalty);
         else
-            compute_joint_optimization<kmer_t, uint64_t>(kMerVec, of, k, complements, objective);
+            compute_joint_optimization<kmer_t, uint64_t>(kMerVec, of, k, complements, objective, penalty);
     }
     catch (const std::exception& e){
         WriteLog("Exception was thrown: " + std::string(e.what()) + ".");

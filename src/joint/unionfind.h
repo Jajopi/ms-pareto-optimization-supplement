@@ -2,7 +2,7 @@
 
 #include <vector>
 
-/// Union-find with non-comutative union operation
+/// Union-find with non-comutative union operation (used to track additional information about ends of leaf chains)
 template<typename size_n_max>
 class UnionFind {
     std::vector<size_n_max> roots;
@@ -30,7 +30,7 @@ public:
         return find(x) == find(y);
     }
 
-    inline void connect(size_n_max to, size_n_max from){ // Second one points to the first one - points to the begining of a chain
+    inline void connect(size_n_max to, size_n_max from){ /// Second one points to the first one - points to the begining of a chain
         if (are_connected(from, to)) return;
         roots[from] = to;
         --component_count;
