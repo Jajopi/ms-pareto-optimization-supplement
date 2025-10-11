@@ -18,7 +18,7 @@ size_t MAX_ITERS_WIDTH = 3;
 template <typename kmer_t, typename size_n_max>
 class LeafOnlyAC {
     using stack_t = std::vector<std::tuple<size_k_max, size_k_max, size_n_max, size_n_max>>;
-    static const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
+    static constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
 
     size_k_max K;                                   /// Length of a kmer
     size_n_max N;                                   /// Number of kmers (= number of leaves of a trie)
