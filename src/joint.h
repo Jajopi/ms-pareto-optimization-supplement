@@ -42,7 +42,7 @@ size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
 /// If complements are provided, treat k-mer and its complement as identical.
 /// If this is the case, k-mers are expected not to contain both k-mer and its complement.
 template <typename kmer_t>
-void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string, size_k_max penalty = 0){
+void JointOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string, size_k_max penalty){
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");

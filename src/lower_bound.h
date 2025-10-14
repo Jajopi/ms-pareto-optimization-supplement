@@ -171,7 +171,7 @@ size_t compute_joint_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, boo
 }
 
 template <typename kmer_t>
-size_t LowerBoundJoint(std::vector<kmer_t>&& kMerVec, const int k, bool complements, std::string objective_string) {
+size_t LowerBoundJoint(std::vector<kmer_t>&& kMerVec, const int k, bool complements, std::string objective_string, int penalty) {
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");
@@ -189,9 +189,11 @@ size_t LowerBoundJoint(std::vector<kmer_t>&& kMerVec, const int k, bool compleme
         /// Skipping this step as input data are nice
         // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
 
-        size_k_max penalty;
-        if (objective == JointObjective::RUNS)       penalty = DEFAULT_PENALTY_RUNS;
-        else if (objective == JointObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
+        if (penalty == 0){
+            if (objective == JointObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;
+            if (objective == JointObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
+            WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
+        }
 
         size_t limit = kMerVec.size();
         if      (limit <= (size_t(1) << 15))

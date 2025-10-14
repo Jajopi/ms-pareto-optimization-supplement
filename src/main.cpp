@@ -106,7 +106,7 @@ void Version() {
 /// Run KmerCamel with the given parameters.
 template <typename kmer_t, typename kh_wrapper_t>
 int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, int d_max, std::ostream *of, std::ostream *maskf, bool complements, bool masks,
-                    std::string algorithm, bool lower_bound, bool assume_simplitigs, std::string objective) {
+                    std::string algorithm, bool lower_bound, bool assume_simplitigs, std::string objective, int penalty = 0) {
     if (masks) {
         WriteLog("Started optimization of a masked superstring from '" + path + "'.");
         int ret = Optimize(wrapper, kmer_type, algorithm, path, *of, k, complements);
@@ -172,9 +172,9 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
             wrapper.kh_destroy_set(kMers);
             if (lower_bound){
-                *of << LowerBoundJoint(std::move(kMerVec), k, complements, objective);
+                *of << LowerBoundJoint(std::move(kMerVec), k, complements, objective, penalty);
             } else {
-                JointOptimization(std::move(kMerVec), *of, k, complements, objective);
+                JointOptimization(std::move(kMerVec), *of, k, complements, objective, penalty);
             }
         } else {
             Local(kMers, wrapper, kmer_type, *of, k, d_max, complements);
@@ -225,8 +225,9 @@ int camel_compute(int argc, char **argv) {
     bool assume_simplitigs = false;
     int opt;
     std::string objective = ""; /// Possible: runs, zeros
+    int penalty = 0;
     try {
-        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:"))  != -1) {
+        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:p:"))  != -1) {
             switch(opt) {
                 case 'o':
                     output.open(optarg);
@@ -257,6 +258,9 @@ int camel_compute(int argc, char **argv) {
                     break;
                 case 'O':
                     objective = optarg;
+                    break;
+                case 'p':
+                    penalty = std::stoi(optarg);
                     break;
                 case 'h':
                     usage_subcommand(subcommand);
@@ -301,11 +305,11 @@ int camel_compute(int argc, char **argv) {
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
     }
 }
 
