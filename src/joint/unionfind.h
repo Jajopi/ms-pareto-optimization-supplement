@@ -8,13 +8,13 @@ class UnionFind {
     std::vector<size_n_max> roots;
     size_n_max component_count;
 public:
-    UnionFind(size_n_max size) : roots(size), component_count(size) {
+    UnionFind(size_n_max size) : roots(size), component_count(size){
         for (size_n_max i = 0; i < size; ++i) roots[i] = i;
     };
     UnionFind() = default;
     
-    inline size_n_max find(size_n_max x) {
-        size_n_max root = roots[x];
+    inline size_n_max find(size_n_max x){
+        size_n_max root = x;
         if (roots[root] == root) return root;
 
         while (roots[root] != root) root = roots[root];
@@ -32,7 +32,7 @@ public:
 
     inline void connect(size_n_max to, size_n_max from){ /// Second one points to the first one - points to the begining of a chain
         if (are_connected(from, to)) return;
-        roots[from] = to;
+        roots[find(from)] = find(to);
         --component_count;
     }
 
