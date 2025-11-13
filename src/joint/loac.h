@@ -68,7 +68,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::construct_complements() {
 
     std::vector<std::pair<kmer_t, size_n_max>> complement_kmers(N);
     for (size_n_max i = 0; i < N; ++i){
-        complement_kmers[i] = std::make_pair(ReverseComplement(kMers[i], K), N - i); /// For even k, swapping indexes for same pairs of kmers is needed
+        complement_kmers[i] = std::make_pair(ReverseComplement(kMers[i], K), N - i); /// For even k, swapping indexes for same pairs of kmers fixes self-complement handling
     }
 
     std::sort(complement_kmers.begin(), complement_kmers.end());
