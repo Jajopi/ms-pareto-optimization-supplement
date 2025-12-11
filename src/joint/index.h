@@ -68,10 +68,10 @@ class FailureIndex {
 public:
     static constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
     
-    inline FailureIndex(const std::vector<kmer_t> &kmers, size_k_max k) :
+    inline FailureIndex(const std::vector<kmer_t> &kmers, size_k_max k, bool print_progress = true) :
     kMers(kmers), N(kmers.size()), K(k) {
         construct_index();
-        WriteLog("Finished constructing index.");
+        if (print_progress) WriteLog("Finished constructing index.");
     }
 
     inline size_n_max find_first_failure_leaf(kmer_t kmer, size_k_max depth){

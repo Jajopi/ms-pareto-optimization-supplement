@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
+#include <unistd.h>
 
-#include "unistd.h"
 #include "version.h"
 #include "ac/global_ac.h"
 #include "global.h"
@@ -14,10 +14,6 @@
 #include "khash_utils.h"
 #include "conversions.h"
 
-#include <iostream>
-#include <string>
-#include "unistd.h"
-#include "version.h"
 #include "masks.h"
 #include "lower_bound.h"
 #include "joint.h"
@@ -117,8 +113,8 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
 
     if (lower_bound && objective == "matchtig-count"){
         auto *kMers = wrapper.kh_init_set();
+        ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
         std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
-        std::cerr << kh_size(kMers) << std::endl;
         wrapper.kh_destroy_set(kMers);
         *of << LowerBoundMatchtigCount(std::move(kMerVec), k, complements) << std::endl;
         return 0;
@@ -396,6 +392,7 @@ int camel_lowerbound(int argc, char **argv) {
                     break;
                 case 'u':
                     complements = false;
+                    break;
                 case 'h':
                     usage_subcommand(subcommand);
                     return 0;
