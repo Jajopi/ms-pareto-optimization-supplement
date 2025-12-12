@@ -2,6 +2,9 @@
 
 #include <vector>
 #include <tuple>
+#include <algorithm>
+#include <numeric>
+#include <limits>
 
 #include "global.h"
 #include "kmers.h"
@@ -24,54 +27,66 @@ size_t LowerBoundLength(kh_wrapper_t wrapper, kmer_t kmer_type, std::vector<simp
 }
 
 
-/// Kuhn's algorithm from https://cp-algorithms.com/graph/kuhn_maximum_bipartite_matching.html
-template <typename size_n_max>
+/// Kuhn's algorithm from https://cp-algorithms.com/graph/kuhn_maximum_bipartite_matching.html (but we ignore different partition sizes)
+/// Speedup:
+/// - Uses given node order (reverse topological)
+/// - Both heuristic and improvement phases use recursion to supply reachability edges
+/// As a result, it runs in few seconds instead a few hours on covid dataset
 class MaximumBipartiteMatchingSolver {
-    constexpr static size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
-    std::vector<std::vector<size_n_max>> g;
-    size_n_max n, k;
-    std::vector<size_n_max> mt;
+    constexpr static uint32_t INVALID_NODE = std::numeric_limits<uint32_t>::max();
+    const std::vector<std::vector<uint32_t>>& g;
+    const std::vector<uint32_t>& node_order;
+    uint32_t n;
+    std::vector<uint32_t> mt;
     std::vector<bool> used;
     
-    bool try_kuhn(size_n_max v) {
-        if (used[v])
-        return false;
-        used[v] = true;
-        for (size_n_max to : g[v]) {
-            if (mt[to] == INVALID_NODE || try_kuhn(mt[to])) {
-                mt[to] = v;
+    inline bool try_kuhn(uint32_t from, uint32_t target) {
+        if (used[from]) return false;
+        used[from] = true;
+
+        for (uint32_t to : g[from]) {
+            if (mt[to] == INVALID_NODE || try_kuhn(mt[to], mt[to])) {
+                mt[to] = target;
                 return true;
             }
+            if (try_kuhn(to, target)) return true;
+        }
+        return false;
+    }
+    inline bool try_heuristic_reachable_edges(uint32_t from, uint32_t target){
+        for (uint32_t to : g[from]) {
+            if (mt[to] == INVALID_NODE) {
+                mt[to] = target;
+                return true;
+            }
+            if (try_heuristic_reachable_edges(to, target)) return true;
         }
         return false;
     }
 public:
-    size_n_max result;
+    uint32_t result;
 
-    MaximumBipartiteMatchingSolver(const std::vector<std::vector<size_n_max>> &edges)
-    : g(edges), n(edges.size()), k(edges.size()), result(0) {
-        mt.assign(k, INVALID_NODE);
+    MaximumBipartiteMatchingSolver(const std::vector<std::vector<uint32_t>> &edges, const std::vector<uint32_t> &node_order)
+    : g(edges), node_order(node_order), n(edges.size()), mt(edges.size(), INVALID_NODE), used(edges.size(), false), result(0) {
 
         /// Get arbitrary matching to start with
-        std::vector<bool> used1(n, false);
-        for (size_n_max v = 0; v < n; ++v) {
-            if (v % 10000 == 0) WriteLog("Computing arbitrary matching: " + std::to_string(v) + "/" + std::to_string(n) + ".");
-            for (size_n_max to : g[v]) {
-                if (mt[to] == INVALID_NODE) {
-                    mt[to] = v;
-                    used1[v] = true;
-                    result++;
-                    break;
-                }
+        WriteLog("Computing arbitrary matching by heuristic.");
+        std::vector<bool> used_by_heuristic(n, false);
+        for (uint32_t i = 0; i < n; ++i) {
+            uint32_t v = node_order[i];
+            if (try_heuristic_reachable_edges(v, v)){
+                used_by_heuristic[v] = true;
+                result++;
             }
         }
         /// Improve matching using Kuhn's algorithm
-        for (size_n_max v = 0; v < n; ++v) {
-            if (v % 10000 == 0) WriteLog("Improving matching: " + std::to_string(v) + "/" + std::to_string(n) + ".");
-            if (used1[v])
-                continue;
+        WriteLog("Heuristic matched " + std::to_string(result) + ". Improving using Kuhn's algorithm.");
+        for (uint32_t i = 0; i < n; ++i) {
+            uint32_t v = node_order[i];
+            if (used_by_heuristic[v]) continue;
+            
             used.assign(n, false);
-            result += try_kuhn(v);
+            if (try_kuhn(v, v)) result++;
         }
         WriteLog("Finished computing maximum bipartite matching of size " + std::to_string(result) + ".");
     }
@@ -86,8 +101,8 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
     std::vector<size_n_max> contracted_indexes(N, INVALID_NODE);
     size_n_max CN; // Contracted node count
     
-    std::vector<std::vector<size_n_max>> edges;
-    size_n_max matchtig_count = 0;
+    std::vector<std::vector<uint32_t>> edges;
+    uint32_t matchtig_count = 0;
 
     {
         /// Contract cycles and count in-edges -- Tarjan's algorithm for finding strongly connected components
@@ -212,21 +227,31 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
         }
     }
 
-    {
-        /// Extend edges to reachability-edges
-        std::vector<bool> has_children_complete(CN, false), is_in_stack(CN, false);
-        std::vector<size_n_max> stack; stack.reserve(CN);
-        for (size_n_max node = 0; node < CN; ++node){
-            if (node % 10000 == 0) WriteLog("Extending reachability edges: " + std::to_string(node) + "/" + std::to_string(CN) + ".");
+    if (edges.size() <= 100){
+        WriteLog("Final graph:");
+        for (size_n_max i = 0; i < CN; ++i){
+            std::cerr << "\t" << i << ": ";
+            for (auto edge: edges[i]) std::cerr << edge << " ";
+            std::cerr << std::endl;
+        }
+    }
 
+    std::vector<uint32_t> reverse_topological_order(CN, 0);
+    {
+        /// Mark nodes reverse topologically -- children of node have lower numbers than the node
+        WriteLog("Building reverse topological order for nodes.");
+        std::vector<bool> has_children_complete(CN, false), is_in_stack(CN, false);
+        std::vector<uint32_t> sorted_orders(CN, 0);
+        std::vector<uint32_t> stack; stack.reserve(CN);
+        for (uint32_t node = 0; node < CN; ++node){
             if (has_children_complete[node]) continue;
+
             stack.clear(); stack.push_back(node);
             while (!stack.empty()){
-                size_n_max reached_node = stack.back();
+                uint32_t reached_node = stack.back();
     
                 if (!has_children_complete[reached_node]){
-                    for (size_n_max next_node : edges[reached_node]){
-                        // if (reached_node == next_node) continue;
+                    for (uint32_t next_node : edges[reached_node]){
                         if (is_in_stack[next_node]) continue;
                         is_in_stack[next_node] = true;
                         if (!has_children_complete[next_node]) stack.push_back(next_node);
@@ -234,16 +259,22 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
                     has_children_complete[reached_node] = true;
                 } else {
                     stack.pop_back();
-                    size_n_max edge_count = edges[reached_node].size();
-                    for (size_n_max e = 0; e < edge_count; ++e){
-                        for (size_n_max further_node : edges[edges[reached_node][e]]){
-                            edges[reached_node].push_back(further_node);
-                        }
+                    uint32_t edge_count = edges[reached_node].size();
+                    for (uint32_t e = 0; e < edge_count; ++e){
+                        sorted_orders[reached_node] = std::max(sorted_orders[reached_node], sorted_orders[edges[reached_node][e]] + 1);
                     }
-                    std::sort(edges[reached_node].begin(), edges[reached_node].end());
-                    edges[reached_node].erase(std::unique(edges[reached_node].begin(), edges[reached_node].end()), edges[reached_node].end());
                 }
             }
+        }
+        std::iota(reverse_topological_order.begin(), reverse_topological_order.end(), 0);
+        std::sort(reverse_topological_order.begin(), reverse_topological_order.end(), [&](uint32_t a, uint32_t b){
+            return sorted_orders[a] < sorted_orders[b];
+        });
+        WriteLog("Sorting edges of all nodes by reverse topological order.");
+        for (uint32_t node = 0; node < CN; ++node){
+            std::sort(edges[node].begin(), edges[node].end(), [&](uint32_t a, uint32_t b){
+                return sorted_orders[a] < sorted_orders[b];
+            });
         }
     }
 
@@ -280,19 +311,10 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
     //     }
     // }
 
-    if (edges.size() <= 100){
-        WriteLog("Final graph:");
-        for (size_n_max i = 0; i < CN; ++i){
-            std::cerr << "\t" << i << ": ";
-            for (auto edge: edges[i]) std::cerr << edge << " ";
-            std::cerr << std::endl;
-        }
-    }
-
     /// Compute maximum bipartite matching
-    WriteLog("Starting maximum bipartite matching on " + std::to_string(CN) + " nodes.");
-    
-    auto mbms = MaximumBipartiteMatchingSolver(edges);
+    WriteLog("Computing maximum bipartite matching on " + std::to_string(CN) + " nodes.");
+
+    auto mbms = MaximumBipartiteMatchingSolver(edges, reverse_topological_order);
 
     return matchtig_count + (CN - mbms.result);
 }
