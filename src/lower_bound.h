@@ -33,7 +33,6 @@ size_t LowerBoundLength(kh_wrapper_t wrapper, kmer_t kmer_type, std::vector<simp
 /// - Both heuristic and improvement phases use recursion to supply reachability edges
 /// As a result, it runs in few seconds instead a few hours on covid dataset
 class MaximumBipartiteMatchingSolver {
-    constexpr static uint32_t INVALID_NODE = std::numeric_limits<uint32_t>::max();
     const std::vector<std::vector<uint32_t>>& g;
     const std::vector<uint32_t>& node_order;
     uint32_t n;
@@ -45,6 +44,11 @@ class MaximumBipartiteMatchingSolver {
         used[from] = true;
 
         for (uint32_t to : g[from]) {
+            if (node_order[to] == INVALID_NODE){ // Skip marked nodes
+                if (try_kuhn(to, target)) return true;
+                continue;
+            }
+
             if (mt[to] == INVALID_NODE || try_kuhn(mt[to], mt[to])) {
                 mt[to] = target;
                 return true;
@@ -55,6 +59,11 @@ class MaximumBipartiteMatchingSolver {
     }
     inline bool try_heuristic_reachable_edges(uint32_t from, uint32_t target){
         for (uint32_t to : g[from]) {
+            if (node_order[to] == INVALID_NODE){ // Skip marked nodes
+                if (try_heuristic_reachable_edges(to, target)) return true;
+                continue;
+            }
+
             if (mt[to] == INVALID_NODE) {
                 mt[to] = target;
                 return true;
@@ -64,25 +73,28 @@ class MaximumBipartiteMatchingSolver {
         return false;
     }
 public:
+    constexpr static uint32_t INVALID_NODE = std::numeric_limits<uint32_t>::max();
     uint32_t result;
 
-    MaximumBipartiteMatchingSolver(const std::vector<std::vector<uint32_t>> &edges, const std::vector<uint32_t> &node_order)
-    : g(edges), node_order(node_order), n(edges.size()), mt(edges.size(), INVALID_NODE), used(edges.size(), false), result(0) {
+    MaximumBipartiteMatchingSolver(const std::vector<std::vector<uint32_t>> &edges, const std::vector<uint32_t> &node_order, uint32_t removed_nodes = 0)
+    : g(edges), node_order(node_order), n(node_order.size()), mt(node_order.size(), INVALID_NODE), used(node_order.size(), false), result(0) {
 
         /// Get arbitrary matching to start with
-        WriteLog("Computing arbitrary matching by heuristic.");
+        WriteLog("Computing arbitrary matching of graph with " + std::to_string(n - removed_nodes) + " nodes by heuristic...");
         std::vector<bool> used_by_heuristic(n, false);
         for (uint32_t i = 0; i < n; ++i) {
             uint32_t v = node_order[i];
+            if (v == INVALID_NODE) continue; // Node was removed
             if (try_heuristic_reachable_edges(v, v)){
                 used_by_heuristic[v] = true;
                 result++;
             }
         }
         /// Improve matching using Kuhn's algorithm
-        WriteLog("Heuristic matched " + std::to_string(result) + ". Improving using Kuhn's algorithm.");
+        WriteLog("Heuristic matched " + std::to_string(result) + ". Improving using Kuhn's algorithm...");
         for (uint32_t i = 0; i < n; ++i) {
             uint32_t v = node_order[i];
+            if (v == INVALID_NODE) continue; // Node was removed
             if (used_by_heuristic[v]) continue;
             
             used.assign(n, false);
@@ -96,7 +108,7 @@ template <typename kmer_t, typename size_n_max>
 size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max k, bool complement_mode){
     constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
     size_n_max N = kMers.size();
-    WriteLog("Nodes initially: " + std::to_string(N) + ".");
+    WriteLog("Nodes initially: " + std::to_string(N) + ". Contracting cycles...");
 
     std::vector<size_n_max> contracted_indexes(N, INVALID_NODE);
     size_n_max CN; // Contracted node count
@@ -164,7 +176,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
                 }
             }
         }
-        WriteLog("Nodes after cycle contraction: " + std::to_string(contracted_nodes.count()));
+        WriteLog("Nodes after cycle contraction: " + std::to_string(contracted_nodes.count()) + ". Contracting paths...");
         
         /// Contract paths
         for (size_n_max base_node = 0; base_node < N; ++base_node){
@@ -175,7 +187,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
             if (in_edges[failure_index] > 1) continue; // Two or more in-edges
             contracted_nodes.connect(failure_index, base_node); // base-node -> failure_index
         }
-        WriteLog("Nodes after path contraction: " + std::to_string(contracted_nodes.count()));
+        WriteLog("Nodes after path contraction: " + std::to_string(contracted_nodes.count()) + ". Removing single nodes and simple paths...");
 
         {
             /// Remove single nodes and simple paths -- not really effective now, can be possibly done better (in later phases)
@@ -188,7 +200,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
                 was_removed[last_node] = true;
                 ++matchtig_count;
             }
-            WriteLog("Nodes after non-branching path removal: " + std::to_string(contracted_nodes.count() - matchtig_count) + ".");
+            WriteLog("Nodes after non-branching path removal: " + std::to_string(contracted_nodes.count() - matchtig_count) + ". Building graph...");
             
             CN = contracted_nodes.count() - matchtig_count; // matchtig_count are nodes removed in the previous step
             
@@ -239,7 +251,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
     std::vector<uint32_t> reverse_topological_order(CN, 0);
     {
         /// Mark nodes reverse topologically -- children of node have lower numbers than the node
-        WriteLog("Building reverse topological order for nodes.");
+        WriteLog("Sorting nodes and edges by reverse topological order...");
         std::vector<bool> has_children_complete(CN, false), is_in_stack(CN, false);
         std::vector<uint32_t> sorted_orders(CN, 0);
         std::vector<uint32_t> stack; stack.reserve(CN);
@@ -266,11 +278,13 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
                 }
             }
         }
+        /// Get node order
         std::iota(reverse_topological_order.begin(), reverse_topological_order.end(), 0);
         std::sort(reverse_topological_order.begin(), reverse_topological_order.end(), [&](uint32_t a, uint32_t b){
             return sorted_orders[a] < sorted_orders[b];
         });
-        WriteLog("Sorting edges of all nodes by reverse topological order.");
+
+        /// Sort edges
         for (uint32_t node = 0; node < CN; ++node){
             std::sort(edges[node].begin(), edges[node].end(), [&](uint32_t a, uint32_t b){
                 return sorted_orders[a] < sorted_orders[b];
@@ -278,52 +292,51 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
         }
     }
 
-    /// Link complements and extend reachability in bi-directional mode -- I honestly have no idea what should happen with complements actually, have to think about it for a bit
-    // if (complement_mode){
-    //     std::vector<size_n_max> complements;
-    //     std::vector<std::pair<kmer_t, size_n_max>> complement_kmers(N);
-    //     for (size_n_max i = 0; i < N; ++i){
-    //         complement_kmers[i] = std::make_pair(ReverseComplement(kMers[i], k), N - i); /// For even k, swapping indexes for same pairs of kmers fixes self-complement handling
-    //     }
-
-    //     std::sort(complement_kmers.begin(), complement_kmers.end());
-
-    //     complements.resize(N);
-    //     for (size_n_max i = 0; i < N; ++i) complements[i] = N - complement_kmers[i].second;
-
-    //     std::vector<bool> complements_linked(CN, false);
-
-    //     for (size_n_max base_node = 0; base_node < N; ++base_node){
-    //         size_n_max contracted_base = contracted_indexes[base_node];
-    //         if (complements_linked[contracted_base]) continue;
-
-    //         size_n_max complement_node = complements[base_node];
-    //         size_n_max contracted_complement = contracted_indexes[complement_node];
-    //         if (contracted_base == contracted_complement) continue;
-            
-    //         edges[contracted_base][contracted_complement] = true;
-    //         for (size_n_max next_node = 0; next_node < CN; ++next_node){
-    //             if (edges[contracted_base][next_node]){
-                    
-    //             }
-    //         }
-    //         complements_linked[contracted_base] = true;
-    //     }
-    // }
-
     /// Compute maximum bipartite matching
-    WriteLog("Computing maximum bipartite matching on " + std::to_string(CN) + " nodes.");
+    {
+        auto mbms_all = MaximumBipartiteMatchingSolver(edges, reverse_topological_order);
+        matchtig_count += CN - mbms_all.result; // Number of matchtigs is number of unmatched nodes
+    }
 
-    auto mbms = MaximumBipartiteMatchingSolver(edges, reverse_topological_order);
+    if (!complement_mode) return matchtig_count;
 
-    return matchtig_count + (CN - mbms.result);
+    /// Link complements in bi-directional mode, remove self-complement nodes
+    WriteLog("Searching for complements and marking self-complement nodes...");
+    size_n_max self_complement_count = 0; // Trimmed node count
+    {
+        std::vector<size_n_max> complements;
+        std::vector<std::pair<kmer_t, size_n_max>> complement_kmers(N);
+        for (size_n_max i = 0; i < N; ++i){
+            complement_kmers[i] = std::make_pair(ReverseComplement(kMers[i], k), N - i); /// For even k, swapping indexes for same pairs of kmers fixes self-complement handling
+        }
+        std::sort(complement_kmers.begin(), complement_kmers.end());
+        complements.resize(N);
+        for (size_n_max i = 0; i < N; ++i) complements[i] = N - complement_kmers[i].second;
+
+        for (size_n_max base_node = 0; base_node < N; ++base_node){
+            size_n_max contracted_base = contracted_indexes[base_node];
+            if (contracted_base == INVALID_NODE) continue;
+            if (contracted_base == contracted_indexes[complements[base_node]]){
+                if (reverse_topological_order[contracted_base] != MaximumBipartiteMatchingSolver::INVALID_NODE) self_complement_count++;
+                reverse_topological_order[contracted_base] = MaximumBipartiteMatchingSolver::INVALID_NODE;
+            }
+        }
+
+        WriteLog("Found " + std::to_string(self_complement_count) + " self-complement nodes.");
+    }
+
+    /// Compute maximum bipartite matching on graph without self-complement nodes to get duplicate matchtigs
+    auto mbms_trimmed = MaximumBipartiteMatchingSolver(edges, reverse_topological_order, self_complement_count);
+    matchtig_count -= (CN - self_complement_count - mbms_trimmed.result) / 2;  // Number of matchtigs is number of unmatched nodes
+
+    return matchtig_count;
 }
 
 template <typename kmer_t>
 size_t LowerBoundMatchtigCount(std::vector<kmer_t>&& kMerVec, size_k_max k, bool complements) {
     try {
         if (kMerVec.empty()) {
-            throw std::invalid_argument("Empty input provided");
+            throw std::invalid_argument("Empty input provided.");
         }
 
         /// Add complements
