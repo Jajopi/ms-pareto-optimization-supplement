@@ -2,7 +2,7 @@
 
 #include <string>
 #include <iostream>
-#include <glpk.h>
+// #include <glpk.h>
 
 #include "parser.h"
 #include "khash_utils.h"
@@ -180,60 +180,63 @@ std::pair<std::vector<int>, std::vector<int>> HeuristicPreSolve(std::vector<std:
 /// For the given masked superstring output the same superstring with mask with minimal number of runs of ones.
 template <typename kmer_t, typename kh_S_t, typename kh_wrapper_t>
 void OptimizeRuns(kh_wrapper_t wrapper, kmer_t _, kseq_t* masked_superstring, kh_S_t *kMers, std::ostream &of, int k, bool complements, bool approximate) {
-    auto *intervals = wrapper.kh_init_map();
-    std::vector<std::list<size_t>> intervalsForKMer;
-    auto [size, rows] = ReadWriteIntervals(intervals, kMers, wrapper, _, intervalsForKMer, masked_superstring, k, complements, of, nullptr);
-    int mappedSize, newIntervals; size_t totalIntervals;
-    auto [mapping, intervalMapping] = HeuristicPreSolve(intervalsForKMer, rows, mappedSize, totalIntervals, newIntervals);
-    glp_prob *lp;
-    lp = glp_create_prob();
-    if (mappedSize != 0 && !approximate) {
-        auto *ia = new int[totalIntervals + 1];
-        auto *ja = new int[totalIntervals + 1];
-        auto *ar = new double[totalIntervals + 1];
-        glp_set_obj_dir(lp, GLP_MIN);
-        // Add a row per each k-mer.
-        glp_add_rows(lp, mappedSize);
-        for (int i = 0; i < mappedSize; ++i) {
-            glp_set_row_bnds(lp, i + 1, GLP_LO, 1.0, 0.0);
-        }
-        // Add a column per each undecided interval.
-        glp_add_cols(lp, newIntervals);
-        for (int i = 0; i < newIntervals; ++i) {
-            glp_set_col_bnds(lp, i + 1, GLP_LO, 0.0, 1.0);
-            glp_set_col_kind(lp, i + 1, GLP_IV);
-            glp_set_obj_coef(lp, i + 1, 1.0);
-        }
-        int index = 0;
-        for (auto key = kh_begin(intervals); key != kh_end(intervals); ++key) {
-            if (!kh_exist(intervals, key)) continue;
-            size_t i = kh_value(intervals, key);
-            if (mapping[i] == -1) continue;
-            for (auto j: intervalsForKMer[i]) {
-                ja[index + 1] = intervalMapping[j] + 1;
-                ia[index + 1] = mapping[i] + 1;
-                ar[index + 1] = 1.0;
-                ++index;
-            }
-        }
-        // Supress glpk output.
-        glp_term_out(GLP_OFF);
 
-        glp_load_matrix(lp, index, ia, ja, ar);
-        glp_simplex(lp, nullptr);
-    }
+    /// Commented out so no glpk is needed and can compile on Metacentrum where this functionality is not needed.
 
-    bool *intervalsSet = new bool[rows];
+    // auto *intervals = wrapper.kh_init_map();
+    // std::vector<std::list<size_t>> intervalsForKMer;
+    // auto [size, rows] = ReadWriteIntervals(intervals, kMers, wrapper, _, intervalsForKMer, masked_superstring, k, complements, of, nullptr);
+    // int mappedSize, newIntervals; size_t totalIntervals;
+    // auto [mapping, intervalMapping] = HeuristicPreSolve(intervalsForKMer, rows, mappedSize, totalIntervals, newIntervals);
+    // glp_prob *lp;
+    // lp = glp_create_prob();
+    // if (mappedSize != 0 && !approximate) {
+    //     auto *ia = new int[totalIntervals + 1];
+    //     auto *ja = new int[totalIntervals + 1];
+    //     auto *ar = new double[totalIntervals + 1];
+    //     glp_set_obj_dir(lp, GLP_MIN);
+    //     // Add a row per each k-mer.
+    //     glp_add_rows(lp, mappedSize);
+    //     for (int i = 0; i < mappedSize; ++i) {
+    //         glp_set_row_bnds(lp, i + 1, GLP_LO, 1.0, 0.0);
+    //     }
+    //     // Add a column per each undecided interval.
+    //     glp_add_cols(lp, newIntervals);
+    //     for (int i = 0; i < newIntervals; ++i) {
+    //         glp_set_col_bnds(lp, i + 1, GLP_LO, 0.0, 1.0);
+    //         glp_set_col_kind(lp, i + 1, GLP_IV);
+    //         glp_set_obj_coef(lp, i + 1, 1.0);
+    //     }
+    //     int index = 0;
+    //     for (auto key = kh_begin(intervals); key != kh_end(intervals); ++key) {
+    //         if (!kh_exist(intervals, key)) continue;
+    //         size_t i = kh_value(intervals, key);
+    //         if (mapping[i] == -1) continue;
+    //         for (auto j: intervalsForKMer[i]) {
+    //             ja[index + 1] = intervalMapping[j] + 1;
+    //             ia[index + 1] = mapping[i] + 1;
+    //             ar[index + 1] = 1.0;
+    //             ++index;
+    //         }
+    //     }
+    //     // Supress glpk output.
+    //     glp_term_out(GLP_OFF);
 
-    for (size_t i = 0; i < rows; ++i) {
-        if (intervalMapping[i] == -1) intervalsSet[i] = true;
-        else if (approximate) intervalsSet[i] = mappedSize != 0;
-        else intervalsSet[i] = mappedSize == 0 ? false : (glp_get_col_prim(lp, intervalMapping[i] + 1) > 0.5);
-    }
+    //     glp_load_matrix(lp, index, ia, ja, ar);
+    //     glp_simplex(lp, nullptr);
+    // }
 
-    ReprintSequenceHeader(masked_superstring, approximate ? "approxminrun" : "minrun", of);
-    ReadWriteIntervals(intervals, kMers, wrapper, _, intervalsForKMer, masked_superstring, k, complements, of, intervalsSet);
-    of << std::endl;
+    // bool *intervalsSet = new bool[rows];
+
+    // for (size_t i = 0; i < rows; ++i) {
+    //     if (intervalMapping[i] == -1) intervalsSet[i] = true;
+    //     else if (approximate) intervalsSet[i] = mappedSize != 0;
+    //     else intervalsSet[i] = mappedSize == 0 ? false : (glp_get_col_prim(lp, intervalMapping[i] + 1) > 0.5);
+    // }
+
+    // ReprintSequenceHeader(masked_superstring, approximate ? "approxminrun" : "minrun", of);
+    // ReadWriteIntervals(intervals, kMers, wrapper, _, intervalsForKMer, masked_superstring, k, complements, of, intervalsSet);
+    // of << std::endl;
 }
 
 template <typename kmer_t, typename kh_wrapper_t>
