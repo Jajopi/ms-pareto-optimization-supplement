@@ -38,8 +38,12 @@ class MaximumBipartiteMatchingSolver {
     uint32_t n;
     std::vector<uint32_t> mt;
     std::vector<bool> used;
-    
+    std::vector<bool> visited;
+
     inline bool try_kuhn(uint32_t from, uint32_t target) {
+        if (visited[from]) return false;
+        visited[from] = true;
+
         if (used[from]) return false;
         used[from] = true;
 
@@ -58,6 +62,9 @@ class MaximumBipartiteMatchingSolver {
         return false;
     }
     inline bool try_heuristic_reachable_edges(uint32_t from, uint32_t target){
+        if (visited[from]) return false;
+        visited[from] = true;
+
         for (uint32_t to : g[from]) {
             if (node_order[to] == INVALID_NODE){ // Skip marked nodes
                 if (try_heuristic_reachable_edges(to, target)) return true;
@@ -82,6 +89,7 @@ public:
         /// Get arbitrary matching to start with
         WriteLog("Computing arbitrary matching of graph with " + std::to_string(n - removed_nodes) + " nodes by heuristic...");
         std::vector<bool> used_by_heuristic(n, false);
+        visited.assign(n, false);
         for (uint32_t i = 0; i < n; ++i) {
             uint32_t v = node_order[i];
             if (v == INVALID_NODE) continue; // Node was removed
@@ -89,6 +97,7 @@ public:
                 used_by_heuristic[v] = true;
                 result++;
             }
+            visited.assign(n, false);
         }
         /// Improve matching using Kuhn's algorithm
         WriteLog("Heuristic matched " + std::to_string(result) + ". Improving using Kuhn's algorithm...");
@@ -96,9 +105,10 @@ public:
             uint32_t v = node_order[i];
             if (v == INVALID_NODE) continue; // Node was removed
             if (used_by_heuristic[v]) continue;
-            
+
             used.assign(n, false);
             if (try_kuhn(v, v)) result++;
+            visited.assign(n, false);
         }
         WriteLog("Finished computing maximum bipartite matching of size " + std::to_string(result) + ".");
     }
@@ -112,7 +122,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
 
     std::vector<size_n_max> contracted_indexes(N, INVALID_NODE);
     size_n_max CN; // Contracted node count
-    
+
     std::vector<std::vector<uint32_t>> edges;
     uint32_t matchtig_count = 0;
 
@@ -177,7 +187,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
             }
         }
         WriteLog("Nodes after cycle contraction: " + std::to_string(contracted_nodes.count()) + ". Contracting paths...");
-        
+
         /// Contract paths
         for (size_n_max base_node = 0; base_node < N; ++base_node){
             size_n_max failure_index = failureIndex.find_first_failure_leaf_by_index(base_node, k - 1);
@@ -201,9 +211,9 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
                 ++matchtig_count;
             }
             WriteLog("Nodes after non-branching path removal: " + std::to_string(contracted_nodes.count() - matchtig_count) + ". Building graph...");
-            
+
             CN = contracted_nodes.count() - matchtig_count; // matchtig_count are nodes removed in the previous step
-            
+
             /// Link indices between contracted and base nodes
             std::vector<size_n_max> contracted_back_indices; contracted_back_indices.reserve(CN);
             contracted_back_indices.reserve(CN);
@@ -222,13 +232,13 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
         edges.resize(CN);
         for (size_n_max base_node = 0; base_node < N; ++base_node){
             size_n_max contracted_base = contracted_indexes[base_node];
-            
+
             size_n_max failure_index = failureIndex.find_first_failure_leaf_by_index(base_node, k - 1);
             if (failure_index == INVALID_NODE) continue;
             for (size_n_max i = 0; i < 4; ++i){
                 size_n_max next_index = failure_index + i;
                 if (next_index >= N || BitSuffix(kMers[base_node], k - 1) != BitPrefix(kMers[next_index], k, k - 1)) break;
-                
+
                 size_n_max contracted_next = contracted_indexes[next_index];
                 if (contracted_next != contracted_base) edges[contracted_base].push_back(contracted_next);
             }
@@ -261,7 +271,7 @@ size_t compute_matchtig_count_lower_bound(std::vector<kmer_t> kMers, size_k_max 
             stack.clear(); stack.push_back(node);
             while (!stack.empty()){
                 uint32_t reached_node = stack.back();
-    
+
                 if (!has_children_complete[reached_node]){
                     for (uint32_t next_node : edges[reached_node]){
                         if (is_in_stack[next_node]) continue;
@@ -367,7 +377,7 @@ template <typename kmer_t, typename size_n_max>
 size_t compute_joint_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, bool complements, JointObjective objective, size_k_max penalty){
     size_t res = 0;
     size_t N = kMerVec.size();
-    FailureIndex<kmer_t, size_t> failure_index(kMerVec, k);
+    FailureIndex<kmer_t, size_n_max> failure_index(kMerVec, k);
 
     for (size_t i = 0; i < N; ++i){
         if (failure_index.failure_node_exists(i, k - 1)){
