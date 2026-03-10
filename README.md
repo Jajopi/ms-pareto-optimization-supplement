@@ -1,4 +1,8 @@
-# KmerCamel🐫
+# KmerCamel🐫 -- fork with joint optimization implementation
+
+TODO what has been implemented and how to use it.
+
+# Upstream README of KmerCamel🐫
 [![BioConda Install](https://img.shields.io/conda/dn/bioconda/kmercamel.svg?style=flag&label=BioConda%20Install)](https://anaconda.org/bioconda/kmercamel)
 [![KmerCamel test](https://github.com/OndrejSladky/kmercamel/actions/workflows/ci.yml/badge.svg)](https://github.com/OndrejSladky/kmercamel/actions/)
 
