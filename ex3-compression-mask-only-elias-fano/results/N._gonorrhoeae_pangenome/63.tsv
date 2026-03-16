@@ -1,0 +1,15 @@
+method	superstring	mask
+eulertigs	20648116	1092552
+greedy-maxone	17268872	621696
+greedy-minone	17268872	1065280
+greedy-minrun	17268872	620416
+joint-1	17269888	618944
+joint-250	20915478	262144
+joint-30	17435046	520704
+joint-400	22875768	204416
+joint-70	17925966	440768
+joint-7	17279680	591360
+kmer_count	-1	6260453
+lowerbound_length	8633667	-1
+lowerbound_matchtig_count	-1	466
+matchtigs	18206224	552072
