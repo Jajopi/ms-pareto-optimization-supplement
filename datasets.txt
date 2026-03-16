@@ -1,0 +1,10 @@
+# Format: <dataset name> @ <data source url>
+# Comments start with hash #
+
+SARS-CoV-2 pangenome        @   https://zenodo.org/records/14722244/files/sars-cov-2_pangenome_gisaid.unitigs_k128.fa.xz
+S. Pneumoniae pangenome     @   https://zenodo.org/records/14722244/files/spneumo_pangenome_RASE_db.unitigs_k128.fa.xz
+N. gonorrhoeae pangenome    @   https://iuuk.mff.cuni.cz/~vesely/download/preprocessed_data_MS/ngono_pangenome_RASE_db.unitigs_k128.fa.xz
+C. elegans genome           @   https://iuuk.mff.cuni.cz/~vesely/download/preprocessed_data_MS/C.elegans.fna
+
+# TODO add properly decompressible version to zenodo
+E. coli pangenome           @   https://zenodo.org/records/14722244/files/ecoli_pangenome_661k_HQ.unitigs_k128.fa.xz?download=1
