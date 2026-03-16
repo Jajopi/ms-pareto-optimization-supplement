@@ -52,3 +52,7 @@ and can handle `xz`-compressed and uncompressed FASTA files.
 
 In case you need to support other compression formats,
 the simplest way is to modify the `download_data` rule in `tools/download.smk`.
+
+## Implementation
+
+Details about the implementation are provided in separate [README](./kmercamel-pareto/README.md).
