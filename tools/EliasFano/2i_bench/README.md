@@ -1,0 +1,11 @@
+`2i_bench` - Inverted Index Benchmark
+-------
+
+This is the code used for the experiments in the paper [*Techniques for Inverted Index Compression*](http://pages.di.unipi.it/pibiri/papers/ii_survey.pdf) [1], by Giulio Ermanno Pibiri and Rossano Venturini.
+
+A more informative readme is coming soon.
+
+
+References
+-------
+* [1] Giulio Ermanno Pibiri and Rossano Venturini. *Techniques for Inverted Index Compression*. 2020. ACM Computing Surveys (CSUR). [https://arxiv.org/abs/1908.10598v2](https://arxiv.org/abs/1908.10598v2)
