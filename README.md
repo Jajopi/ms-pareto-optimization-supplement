@@ -1,4 +1,9 @@
-# Howto
+# Pareto optimization of masked superstrings
+
+Supplementary repository for paper
+*Pareto optimization of masked superstrings improves compression of pan-genome k-mer sets*.
+
+## Howto
 
 To install dependencies from conda and localy provided programs, use:
 ```bash
@@ -15,7 +20,7 @@ To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`,
     snakemake -j <number_of_threads> <any_optional_parameters>
 ```
 
-# Project structure
+## Project structure
 
 Locally installed programs and snakefiles are stored in `tools` directory.
 
@@ -26,7 +31,7 @@ Default names are:
   (it is recommended to turn off file search indexing for this directory).
 - Results are stored in respective numbered directories (`ex1-...`, `ex2-...`, ...).
 
-## Datasets
+### Datasets
 
 If you want to use the pipeline with custom datasets, you can modify `datasets.txt`.
 Add the dataset name and url, the pipeline downloads datasets automatically
