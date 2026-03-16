@@ -5,6 +5,8 @@ Supplementary repository for paper
 
 ## Howto
 
+### Prepare
+
 To install dependencies from conda and localy provided programs, use:
 ```bash
     ./prepare.sh
@@ -15,10 +17,21 @@ Next time, you only need to activate the conda environment with:
     conda activate ms-pareto-optimization
 ```
 
+### Run
+
 To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`, `ex3-...`) and run:
 ```bash
     snakemake -j <number_of_threads> <any_optional_parameters>
 ```
+
+Experiments produce `.tsv` files with results and plots
+(**TODO** link new R plotting scripts to work from pipeline instead of manually).
+
+### Modify
+
+To tweak an experimental setup, modify the `Snakefile` in the corresponding directory.
+Constants defined on top of Snakefiles define which datasets,
+values of k and run penalty, and computation or compression methods are used.
 
 ## Project structure
 
