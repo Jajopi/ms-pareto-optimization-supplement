@@ -1,0 +1,101 @@
+include: "../snaketools/project_structure.smk"
+include: "../snaketools/download.smk"
+include: "../snaketools/compute.smk"
+include: "../snaketools/compress.smk"
+
+PLOT_SCRIPT_RUNS_VS_LENGTH = "plot_length_vs_runs.py"
+PLOT_FORMATS = ["png"]
+
+DATASETS = [
+    # "N._gonorrhoeae_pangenome",
+    "S._Pneumoniae_pangenome",
+    # "SARS-CoV-2_pangenome",
+    # "E._coli_pangenome",
+]
+KS = [15, 31, 63]
+RUN_PENALTIES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+SUPERSTRING_METHODS = [
+    "unitigs",
+    "simplitigs",
+    "eulertigs",
+    "matchtigs",
+    # "optimal_matchtigs",
+    "greedy-minone",
+    "greedy-maxone",
+    "greedy-minrun",
+] + [
+    f"joint-{run_penalty}" for run_penalty in RUN_PENALTIES
+]
+COUNT_METHODS = [
+    "lowerbound_length",
+    "lowerbound_matchtig_count",
+    "kmer_count",
+]
+
+rule all:
+    input:
+        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS),
+        expand(f"{RESULTS}/{{dataset}}/plot-combined.{{plot_format}}", dataset = DATASETS, plot_format = PLOT_FORMATS),
+
+rule plot_lengths_and_run_counts_combined:
+    priority: 3
+    input:
+        expand("{{results}}/{{dataset}}/{k}.tsv", k = KS)
+    output:
+        f"{{results}}/{{dataset}}/plot-combined.{{plot_format}}"
+    wildcard_constraints:
+        results = RESULTS,
+    shell:
+        f"""
+            ./{PLOT_SCRIPT_RUNS_VS_LENGTH} {RESULTS}/{{wildcards.dataset}}/ {{wildcards.plot_format}}
+        """
+
+rule plot_lengths_and_run_counts_separate:
+    priority: 2
+    input:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    output:
+        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}"
+    wildcard_constraints:
+        k = "\\d+",
+    shell:
+        f"""
+            ./{PLOT_SCRIPT_RUNS_VS_LENGTH} {{input}} {{wildcards.plot_format}}
+        """
+
+rule compute_lengths_and_run_counts:
+    priority: 1
+    input:
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.fa" for method in SUPERSTRING_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.txt" for method in COUNT_METHODS]
+    output:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    wildcard_constraints:
+        k = "\\d+"
+    shell:
+        f"""
+            mkdir -p $(dirname {{output}})
+            for method in {" ".join(SUPERSTRING_METHODS)}; do
+                LENGTH="$(tail -n +2 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".fa | wc -m)"
+                RUNS="$(tail -n +2 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".fa | tr '[a-z]' '0' | tr -s '0' | tr -d '[A-Z]' | wc -m)"
+
+                printf "%s\t%d\t%d\n" "$method" "$LENGTH" "$RUNS" >> {{output}}.tmp
+            done
+
+            for method in {" ".join(COUNT_METHODS)}; do
+                LENGTH=-1
+                RUNS=-1
+                if [[ "$method" == *"length"* ]]; then
+                    LENGTH="$(head -n 1 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".txt)"
+                fi
+                if [[ "$method" == *"count"* ]]; then
+                    RUNS="$(head -n 1 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".txt)"
+                fi
+
+                printf "%s\t%d\t%d\n" "$method" "$LENGTH" "$RUNS" >> {{output}}.tmp
+            done
+
+            echo "method\tsuperstring\tmask" > {{output}}
+            sort {{output}}.tmp >> {{output}}
+            rm {{output}}.tmp
+        """

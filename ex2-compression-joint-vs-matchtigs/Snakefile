@@ -1,0 +1,122 @@
+include: "../snaketools/project_structure.smk"
+include: "../snaketools/download.smk"
+include: "../snaketools/compute.smk"
+include: "../snaketools/compress.smk"
+
+PLOT_SCRIPT = "plot_compressed_sizes.py"
+PLOT_FORMATS = ["png"]
+
+DATASETS = [
+    # "N._gonorrhoeae_pangenome",
+    "S._Pneumoniae_pangenome",
+    # "SARS-CoV-2_pangenome",
+    # "E._coli_pangenome",
+]
+KS = [15, 31, 63]
+RUN_PENALTIES = [1, 7, 30, 70, 250, 400]
+RSPSS_METHODS = [
+    "eulertigs",
+    "matchtigs",
+]
+MS_METHODS = [
+    "greedy-maxone",
+    "greedy-minrun",
+] + [
+    f"joint-{run_penalty}" for run_penalty in RUN_PENALTIES
+]
+
+rule all:
+    input:
+        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS),
+        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}-best.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS)
+
+rule plot_compressed_sizes:
+    priority: 3
+    input:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    output:
+        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}",
+        f"{RESULTS}/{{dataset}}/plot-{{k}}-best.{{plot_format}}"
+    wildcard_constraints:
+        k = "\\d+"
+    shell:
+        f"""
+            ./{PLOT_SCRIPT} {{input}} {{wildcards.k}} {{wildcards.plot_format}}
+        """
+
+rule compute_compressed_sizes:
+    """
+    # COMPRESION PROTOCOLS - OLD
+    #   a) rspss: (name, compr_superstring, compr_seqlens)
+    ("std-basic", "xz_9", "xz_9"),
+    ("std-max",    "xz_max", "xz_9"),
+    ("geco-basic", "geco3_l5", "xz_9"),
+    ("geco-max",   "geco3_max", "xz_9")
+
+    # COMPRESION PROTOCOLS FOR MASKED SUPERSTRINGS - OLD
+    #    b) masked superstrings: (name, compr_superstring, compr_mask)
+    ("std-basic", "xz_9", "bz2_best"),
+    ("std-max", "xz_max", "bz2_best"),
+    ("geco-basic", "geco3_l5", "geco3_l5"),
+    ("geco-max", "geco3_max", "geco3_max")
+
+    # COMPRESION PROTOCOLS - NEW
+    everything:
+        xz_9, xz_9 (MS -- mask, RPSS -- lengths of runs of ones + k)
+        xz_max, bzip2_best
+        geco3_l5, geco3_l5
+        geco3_max, geco3_max
+    """
+    input:
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring.xz"     for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring.xz.max" for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring.co"     for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring.co.max" for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.lengths.xz" for method in RSPSS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.xz"      for method in MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.bz2"     for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.co"      for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.co.max"  for method in RSPSS_METHODS + MS_METHODS],
+        # [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.check" for method in RSPSS_METHODS + MS_METHODS], # Checks all computed representations contain the same number of k-mers
+         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"
+    output:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    shell:
+        f"""
+            mkdir -p $(dirname {{output}})
+
+            for method in {" ".join(RSPSS_METHODS)}; do
+                printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" \
+                    "$method" \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.xz) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.lengths.xz) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.xz.max) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.bz2) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.co) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.co) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.co.max) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.co.max) \
+                    >> {{output}}.tmp
+            done
+
+            for method in {" ".join(MS_METHODS)}; do
+                printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" \
+                    "$method" \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.xz) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.xz) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.xz.max) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.bz2) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.co) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.co) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring.co.max) \
+                    $(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.co.max) \
+                    >> {{output}}.tmp
+            done
+
+            KMER_COUNT=$(cat {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/kmer_count.txt)
+            printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" "kmer_count" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" >> {{output}}.tmp
+
+            echo "method\tsuperstring_std_basic\tmask_std_basic\tsuperstring_std_max\tmask_std_max\tsuperstring_geco_basic\tmask_geco_basic\tsuperstring_geco_max\tmask_geco_max" > {{output}}
+            sort {{output}}.tmp >> {{output}}
+            rm {{output}}.tmp
+        """

@@ -1,0 +1,94 @@
+include: "../snaketools/project_structure.smk"
+include: "../snaketools/download.smk"
+include: "../snaketools/compute.smk"
+include: "../snaketools/compress.smk"
+
+PLOT_SCRIPT = "plot_memory_compressibility.py"
+PLOT_FORMATS = ["png"]
+
+DATASETS = [
+    # "N._gonorrhoeae_pangenome",
+    "S._Pneumoniae_pangenome",
+    # "SARS-CoV-2_pangenome",
+    # "E._coli_pangenome",
+]
+KS = [15, 31, 63]
+RUN_PENALTIES = [1, 7, 30, 70, 250, 400]
+RSPSS_METHODS = [
+    "eulertigs",
+    "matchtigs",
+]
+MS_METHODS = [
+    "greedy-maxone",
+    "greedy-minrun",
+] + [
+    f"joint-{run_penalty}" for run_penalty in RUN_PENALTIES
+]
+COUNT_METHODS = [
+    "lowerbound_length",
+    "lowerbound_matchtig_count",
+    "kmer_count",
+]
+
+rule all:
+    input:
+        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS)
+
+rule plot_elias_fano:
+    priority: 3
+    input:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    output:
+        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}"
+    wildcard_constraints:
+        k = "\\d+"
+    shell:
+        f"""
+            ./{PLOT_SCRIPT} {{input}} {{wildcards.k}} {{wildcards.plot_format}}
+        """
+
+rule compute_compressed_sizes:
+    input:
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring" for method in RSPSS_METHODS + MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.efe"    for method in RSPSS_METHODS + MS_METHODS],
+         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"
+    output:
+        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
+    shell:
+        f"""
+            mkdir -p $(dirname {{output}})
+
+            # Format: method, superstring length, Elias-Fano encoded mask length
+            # We consider 2 bits per character of superstring and mask encoded by Elias-Fano encoding in binary format.
+            # RPSS methods only need to encode ends of runs of ones, but also need to store k, this is simulated by adding one byte (+8 bits).
+
+            for method in {" ".join(RSPSS_METHODS)}; do
+                printf "%s\t%d\t%d\n" "$method" \
+                    $(echo "$(cat {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring | wc -c) * 2" | bc) \
+                    $(echo "$(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.efe) * 8 + 8" | bc ) \
+                    >> {{output}}.tmp
+            done
+            for method in {" ".join(MS_METHODS)}; do
+                printf "%s\t%d\t%d\n" "$method" \
+                    $(echo "$(cat {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".superstring | wc -c) * 2" | bc) \
+                    $(echo "$(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".mask.efe) * 8" | bc ) \
+                    >> {{output}}.tmp
+            done
+
+            for method in {" ".join(COUNT_METHODS)}; do
+                LENGTH=-1
+                RUNS=-1
+                if [[ "$method" == *"length"* ]]; then
+                    LENGTH="$(head -n 1 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".txt)"
+                fi
+                if [[ "$method" == *"count"* ]]; then
+                    RUNS="$(head -n 1 {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/"$method".txt)"
+                fi
+
+                printf "%s\t%d\t%d\n" "$method" "$LENGTH" "$RUNS" >> {{output}}.tmp
+            done
+
+            echo "method\tsuperstring\tmask" > {{output}}
+            sort {{output}}.tmp >> {{output}}
+            rm {{output}}.tmp
+        """
