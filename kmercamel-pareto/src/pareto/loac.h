@@ -23,13 +23,13 @@ class LeafOnlyAC {
     const size_k_max        K;                      /// Length of a kmer
     const size_n_max        N;                      /// Number of kmers (= number of leaves of a trie)
     const bool              COMPLEMENTS;            /// Whether computing with complements (in bi-directional model)
-    const JointObjective    OBJECTIVE;              /// What to apply penalty for -- RUNS or ZEROS
+    const ParetoObjective   OBJECTIVE;              /// What to apply penalty for -- RUNS or ZEROS
     const size_k_max        PENALTY;                /// Value of penalty (for runs / zeros) used in the computation
-    
+
     const std::vector<kmer_t>&       kMers;         /// Sorted leaves of the trie -- kmers
     FailureIndex<kmer_t, size_n_max> failureIndex;  /// Index for fast retrieval of first failure node of given leaf and depth
     UnionFind<size_n_max>            components;    /// Unionfind, tracking ends of leaf chains
-    
+
     std::vector<size_n_max> complements;            /// Index of complement of each kmer
     std::vector<size_n_max> backtracks;             /// Indexes of kmers appearing between leaves in a chain
     std::vector<size_n_max> backtrack_indexes;      /// Index into backtrack_indexes for each leaf -- TODO make more efficient
@@ -40,7 +40,7 @@ class LeafOnlyAC {
     std::vector<bool>       used;                   /// Used leaf has already been used as a next leaf for exactly one other leaf
     std::vector<size_k_max> no_unused;              /// Speedup index -- the smallest depth of node on failure path which has no unused leaves
     stack_t stack;
-    
+
     void construct_complements();
     bool try_complete_leaf_phase_1(size_n_max leaf_to_connect); /// First iteration, "get simplitigs"
     bool try_complete_leaf_phase_2(size_n_max leaf_to_connect, size_k_max priority_drop_limit); /// Until threshold, TODO parallel, blind DFS
@@ -52,10 +52,10 @@ class LeafOnlyAC {
 
     bool RESULT_COMPUTED = false;
 public:
-    LeafOnlyAC(const std::vector<kmer_t>& kmers, size_k_max k, bool use_complements, JointObjective objective, size_k_max penalty) :
+    LeafOnlyAC(const std::vector<kmer_t>& kmers, size_k_max k, bool use_complements, ParetoObjective objective, size_k_max penalty) :
         K(k), N(kmers.size()), COMPLEMENTS(use_complements), OBJECTIVE(objective), PENALTY(penalty), kMers(kmers), failureIndex(kMers, K) { construct_complements(); };
 
-    void compute_result();                      /// Runs joint optimization
+    void compute_result();                      /// Runs pareto optimization
     void optimize_result();                     /// Runs some other reoptimization -- currently none, possible TODO to implement
     size_n_max print_result(std::ostream& of);  /// Prints the masked superstring to output stream, return the value of objective function for printed result
 };
@@ -95,10 +95,10 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::compute_result() {
     used.resize(N, false);
     no_unused.resize(N, K);
     stack.reserve(N); /// TODO more clever?
-    
+
     size_k_max MAX_PRIORITY_DROP = 0;
-    if (OBJECTIVE == JointObjective::RUNS)  MAX_PRIORITY_DROP = (K - 1) + PENALTY;
-    if (OBJECTIVE == JointObjective::ZEROS) MAX_PRIORITY_DROP = (K - 1) * (PENALTY + 1);
+    if (OBJECTIVE == ParetoObjective::RUNS)  MAX_PRIORITY_DROP = (K - 1) + PENALTY;
+    if (OBJECTIVE == ParetoObjective::ZEROS) MAX_PRIORITY_DROP = (K - 1) * (PENALTY + 1);
 
     std::vector<size_n_max> uncompleted_leaves;
 
@@ -110,10 +110,10 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::compute_result() {
         for (size_n_max i = 0; i < N; ++i){
             if (next[i] != INVALID_NODE) continue;
             size_n_max leaf_index = i;
-    
+
             bool result = try_complete_leaf_phase_1(leaf_index);
             if (!result) ++uncompleted_leaf_count;
-            
+
             while (result){
                 leaf_index = next[leaf_index];
                 if (next[leaf_index] != INVALID_NODE) break;
@@ -270,13 +270,13 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::try_push_failure_node_into_stack(sta
         failure_index = failureIndex.find_first_failure_leaf_by_index(node_index, failure_depth);
     }
 
-    if (OBJECTIVE == JointObjective::RUNS){
+    if (OBJECTIVE == ParetoObjective::RUNS){
         if (node_depth == K - 1 || (node_depth == K && failure_depth < K - 1)){ /// Run will be interrupted
             if (priority < PENALTY) return;
             priority -= PENALTY;
         }
     }
-    if (OBJECTIVE == JointObjective::ZEROS){
+    if (OBJECTIVE == ParetoObjective::ZEROS){
         size_k_max priority_decrease = (node_depth - failure_depth - (node_depth == K)) * PENALTY;
         if (priority < priority_decrease) return;
         priority -= priority_decrease;
@@ -330,7 +330,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::set_backtrack_path_for_leaf(size_n_m
         size_n_max new_size = backtracks.size();
         size_n_max count = new_size - last_size;
         for (size_n_max i = 0; i < count; ++i) backtracks.push_back(INVALID_NODE);
-        
+
         size_n_max index = new_size + count - 1;
         size_n_max actual = previous[next_leaf];
         while (index >= last_size + count){
@@ -372,8 +372,8 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max>::print_result(std::ostream& of)
 
             last_kmer = actual_kmer;
             total_objective_value += K - ov;
-            if (OBJECTIVE == JointObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
-            if (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
+            if (OBJECTIVE == ParetoObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
+            if (OBJECTIVE == ParetoObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
 
             if (backtrack_indexes[actual] != INVALID_NODE){
                 size_n_max backtrack_index = backtrack_indexes[actual];
@@ -386,8 +386,8 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max>::print_result(std::ostream& of)
 
                     last_kmer = actual_kmer;
                     total_objective_value += K - ov;
-                    if (OBJECTIVE == JointObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
-                    if (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
+                    if (OBJECTIVE == ParetoObjective::RUNS)  if (ov < K - 1) total_objective_value += PENALTY;
+                    if (OBJECTIVE == ParetoObjective::ZEROS) total_objective_value += PENALTY * (K - 1 - ov);
 
                     --backtrack_index;
                     actual_backtrack = backtracks[backtrack_index];
@@ -400,8 +400,8 @@ inline size_n_max LeafOnlyAC<kmer_t, size_n_max>::print_result(std::ostream& of)
     }
     PrintKmerMasked(last_kmer, K, of, K);
     total_objective_value += K;
-    if (OBJECTIVE == JointObjective::RUNS)  total_objective_value += PENALTY;           /// First run of ones
-    if (OBJECTIVE == JointObjective::ZEROS) total_objective_value += PENALTY * (K - 1); /// Zeros at the end
+    if (OBJECTIVE == ParetoObjective::RUNS)  total_objective_value += PENALTY;           /// First run of ones
+    if (OBJECTIVE == ParetoObjective::ZEROS) total_objective_value += PENALTY * (K - 1); /// Zeros at the end
 
     return total_objective_value;
 }

@@ -8,9 +8,9 @@
 
 #include "global.h"
 #include "kmers.h"
-#include "joint/objective.h"
-#include "joint/index.h"
-#include "joint/unionfind.h"
+#include "pareto/objective.h"
+#include "pareto/index.h"
+#include "pareto/unionfind.h"
 
 /// Return the length of the cycle cover which lower bounds the superstring length.
 template <typename kmer_t, typename kh_wrapper_t>
@@ -374,7 +374,7 @@ size_t LowerBoundMatchtigCount(std::vector<kmer_t>&& kMerVec, size_k_max k, bool
 }
 
 template <typename kmer_t, typename size_n_max>
-size_t compute_joint_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, bool complements, JointObjective objective, size_k_max penalty){
+size_t compute_pareto_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, bool complements, ParetoObjective objective, size_k_max penalty){
     size_t res = 0;
     size_t N = kMerVec.size();
     FailureIndex<kmer_t, size_n_max> failure_index(kMerVec, k);
@@ -387,8 +387,8 @@ size_t compute_joint_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, boo
         for (size_k_max j = 2; j <= k; ++j){
             if (failure_index.failure_node_exists(i, k - j)){
                 res += j;
-                if (objective == JointObjective::RUNS)  res += penalty;
-                if (objective == JointObjective::ZEROS) res += penalty * (j - 1);
+                if (objective == ParetoObjective::RUNS)  res += penalty;
+                if (objective == ParetoObjective::ZEROS) res += penalty * (j - 1);
                 break;
             }
         }
@@ -398,13 +398,13 @@ size_t compute_joint_lower_bound(std::vector<kmer_t>& kMerVec, size_k_max k, boo
 
 /// This lowerbound is quite simple and quite bad, it's not useful at all now
 template <typename kmer_t>
-size_t LowerBoundJoint(std::vector<kmer_t>&& kMerVec, const int k, bool complements, std::string objective_string, int penalty) {
+size_t LowerBoundPareto(std::vector<kmer_t>&& kMerVec, const int k, bool complements, std::string objective_string, int penalty) {
     try {
         if (kMerVec.empty()) {
             throw std::invalid_argument("Empty input provided");
         }
 
-        JointObjective objective = GetJointObjective(objective_string);
+        ParetoObjective objective = GetParetoObjective(objective_string);
 
         /// Add complements
         if (complements) AddComplements(kMerVec, k);
@@ -417,18 +417,18 @@ size_t LowerBoundJoint(std::vector<kmer_t>&& kMerVec, const int k, bool compleme
         // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
 
         if (penalty == 0){
-            if (objective == JointObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;
-            if (objective == JointObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
+            if (objective == ParetoObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;
+            if (objective == ParetoObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
             WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
         }
 
         size_t limit = kMerVec.size();
         if      (limit <= (size_t(1) << 15))
-            return compute_joint_lower_bound<kmer_t, uint16_t>(kMerVec, k, complements, objective, penalty);
+            return compute_pareto_lower_bound<kmer_t, uint16_t>(kMerVec, k, complements, objective, penalty);
         else if (limit <= (size_t(1) << 31))
-            return compute_joint_lower_bound<kmer_t, uint32_t>(kMerVec, k, complements, objective, penalty);
+            return compute_pareto_lower_bound<kmer_t, uint32_t>(kMerVec, k, complements, objective, penalty);
         else
-            return compute_joint_lower_bound<kmer_t, uint64_t>(kMerVec, k, complements, objective, penalty);
+            return compute_pareto_lower_bound<kmer_t, uint64_t>(kMerVec, k, complements, objective, penalty);
     }
     catch (const std::exception& e){
         WriteLog("Exception was thrown: " + std::string(e.what()) + ".");

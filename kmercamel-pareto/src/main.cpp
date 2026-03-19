@@ -16,7 +16,7 @@
 
 #include "masks.h"
 #include "lower_bound.h"
-#include "joint.h"
+#include "pareto.h"
 
 int usage() {
     std::cerr << std::endl;
@@ -57,11 +57,11 @@ int usage_subcommand(std::string subcommand) {
 
     if (subcommand != "lowerbound" && subcommand != "ms2mssep")
     std::cerr << "  -o FILE  - output for the (minone) masked superstring; if not specified, printed to stdout" << std::endl;
-    
+
     if (subcommand == "compute")
     std::cerr << "  -M FILE  - if given, print also ms with mask maximizing ones (only with global)" << std::endl;
 
-    
+
     if (subcommand == "compute")
     std::cerr << "  -S       - optimize for the input being correctly computed simplitigs (only with global)" << std::endl;
 
@@ -81,9 +81,9 @@ int usage_subcommand(std::string subcommand) {
     }
 
     if (subcommand == "compute"){
-    std::cerr << "  -O STR   - objective for joint optimization, either 'runs' or zeros'" << std::endl;
+    std::cerr << "  -O STR   - objective for pareto optimization, either 'runs' or zeros'" << std::endl;
     } else if (subcommand == "lowerbound"){
-    std::cerr << "  -O STR   - objective, either 'runs' or 'zeros' for joint optimization, or 'matchtig-count'" << std::endl;
+    std::cerr << "  -O STR   - objective, either 'runs' or 'zeros' for pareto optimization, or 'matchtig-count'" << std::endl;
     }
 
     std::cerr << "  -h       - print help" << std::endl;
@@ -93,7 +93,7 @@ int usage_subcommand(std::string subcommand) {
 
 constexpr int MAX_K = 127;
 constexpr int SIMPLITIG_RATIO_THRESHOLD = 5;
-constexpr const char* ALG_JOINT = "joint";
+constexpr const char* ALG_PARETO = "pareto";
 
 void Version() {
     std::cerr << VERSION << std::endl;
@@ -130,11 +130,11 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         WriteLog("Finished masked superstring computation.");
     }
     /* Handle hash table based algorithms separately so that they consume less memory. */
-    else if (algorithm == "global" || algorithm == "local" || algorithm == ALG_JOINT) {
+    else if (algorithm == "global" || algorithm == "local" || algorithm == ALG_PARETO) {
 
         auto *kMers = wrapper.kh_init_set();
         size_t kmer_count = 0;
-        if (!assume_simplitigs || algorithm == ALG_JOINT) {
+        if (!assume_simplitigs || algorithm == ALG_PARETO) {
             ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
 
             if (!kh_size(kMers)) {
@@ -144,7 +144,7 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             kmer_count = kh_size(kMers);
             WriteLog("Finished collecting k-mers: " + std::to_string(kmer_count) + " " + std::to_string(k) + "-mers.");
         }
-        
+
         d_max = std::min(k - 1, d_max);
         if (!lower_bound) WriteName(path, algorithm, k, false, !complements, *of);
         if (maskf != nullptr) WriteName(path, algorithm, k, true, !complements, *maskf);
@@ -164,13 +164,13 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             }
             else if (lower_bound) *of << LowerBoundLength(wrapper, kmer_type, simplitigs, k, complements);
             else Global(wrapper, kmer_type, simplitigs, *of, maskf, k, complements);
-        } else if (algorithm == ALG_JOINT){ /// TODO use simplitigs?
+        } else if (algorithm == ALG_PARETO){ /// TODO use simplitigs?
             std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
             wrapper.kh_destroy_set(kMers);
             if (lower_bound){
-                *of << LowerBoundJoint(std::move(kMerVec), k, complements, objective, penalty);
+                *of << LowerBoundPareto(std::move(kMerVec), k, complements, objective, penalty);
             } else {
-                JointOptimization(std::move(kMerVec), *of, k, complements, objective, penalty);
+                ParetoOptimization(std::move(kMerVec), *of, k, complements, objective, penalty);
             }
         } else {
             Local(kMers, wrapper, kmer_type, *of, k, d_max, complements);
@@ -293,11 +293,11 @@ int camel_compute(int argc, char **argv) {
     } else if (assume_simplitigs && algorithm != "global") {
         std::cerr << "Optimization for the input being simplitigs is possible only with global." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm != ALG_JOINT && objective.length() != 0){
-        std::cerr << "Option -O (objective) is only valid with 'joint' optimization algorithm." << std::endl;
+    } else if (algorithm != ALG_PARETO && objective.length() != 0){
+        std::cerr << "Option -O (objective) is only valid with 'pareto' optimization algorithm." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm == ALG_JOINT && !(objective == "runs" || objective == "zeros")){
-        std::cerr << "Joint optimization needs an objective: either -O runs or -O zeros." << std::endl;
+    } else if (algorithm == ALG_PARETO && !(objective == "runs" || objective == "zeros")){
+        std::cerr << "Pareto optimization needs an objective: either -O runs or -O zeros." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
@@ -423,18 +423,18 @@ int camel_lowerbound(int argc, char **argv) {
         std::cerr << "k must be positive." << std::endl;
         return usage_subcommand(subcommand);
     } else if (objective.length() != 0){
-        if (algorithm != "global" && algorithm != ALG_JOINT){
-            std::cerr << "Only valid options for algorithm are 'global' (default) of 'joint." << std::endl;
+        if (algorithm != "global" && algorithm != ALG_PARETO){
+            std::cerr << "Only valid options for algorithm are 'global' (default) of 'pareto." << std::endl;
             return usage_subcommand(subcommand);
-        } else if (algorithm == ALG_JOINT && objective != "runs" && objective != "zeros"){
-            std::cerr << "For joint optimization lowerbound, only valid objectives are 'runs' or 'zeros'." << std::endl;
+        } else if (algorithm == ALG_PARETO && objective != "runs" && objective != "zeros"){
+            std::cerr << "For pareto optimization lowerbound, only valid objectives are 'runs' or 'zeros'." << std::endl;
             return usage_subcommand(subcommand);
         } else if (algorithm == "global" && objective != "length" && objective != "matchtig-count"){
             std::cerr << "For global algorithm lowerbound, only valid objectives are 'length' (default) or 'matchtig-count'." << std::endl;
             return usage_subcommand(subcommand);
         }
-    } else if (algorithm == ALG_JOINT && objective != "runs" && objective != "zeros"){
-        std::cerr << "Joint optimization lowerbound needs an objective: either 'runs' or 'zeros'." << std::endl;
+    } else if (algorithm == ALG_PARETO && objective != "runs" && objective != "zeros"){
+        std::cerr << "Pareto optimization lowerbound needs an objective: either 'runs' or 'zeros'." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
@@ -461,7 +461,7 @@ int camel_split_ms(int argc, char **argv) {
     bool superstring_set = false;
     std::ofstream superstring;
     std::ostream *superstringf = &std::cout;
-    
+
     int opt;
     try {
         while ((opt = getopt(argc, argv, "m:s:h"))  != -1) {
@@ -504,7 +504,7 @@ int camel_split_ms(int argc, char **argv) {
     WriteLog("Started splitting masked superstring '" + path + "'.");
     split_ms(*superstringf, *maskf, path);
     WriteLog("Finished masked superstring splitting.");
-    return 0;    
+    return 0;
 }
 
 int camel_join_ms(int argc, char **argv) {
@@ -520,8 +520,8 @@ int camel_join_ms(int argc, char **argv) {
 
     std::ofstream output;
     std::ostream *of = &std::cout;
-    
-    
+
+
     int opt;
     try {
         while ((opt = getopt(argc, argv, "m:s:o:h"))  != -1) {
@@ -565,7 +565,7 @@ int camel_join_ms(int argc, char **argv) {
     WriteLog("Started masked superstring joining.");
     join_ms(*superstringf, *maskf, *of);
     WriteLog("Finished masked superstring joining.");
-    return 0;    
+    return 0;
 }
 
 int camel_ms_to_spss(int argc, char **argv) {
@@ -580,7 +580,7 @@ int camel_ms_to_spss(int argc, char **argv) {
     std::ostream *of = &std::cout;
 
     int k = 0;
-    
+
     int opt;
     try {
         while ((opt = getopt(argc, argv, "o:k:h"))  != -1) {
@@ -631,7 +631,7 @@ int camel_spss_to_ms(int argc, char **argv) {
     std::ostream *of = &std::cout;
 
     int k = 0;
-    
+
     int opt;
     try {
         while ((opt = getopt(argc, argv, "o:k:h"))  != -1) {
@@ -690,6 +690,6 @@ int main(int argc, char **argv) {
         return camel_spss_to_ms(argc - 1, argv + 1);
     } else {
         std::cerr << "Command '" << argv[1] << "' not recognized." << std::endl;
-        return usage(); 
+        return usage();
     }
 }

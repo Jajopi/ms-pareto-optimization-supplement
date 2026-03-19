@@ -22,7 +22,7 @@ MS_METHODS = [
     "greedy-maxone",
     "greedy-minrun",
 ] + [
-    f"joint-{run_penalty}" for run_penalty in RUN_PENALTIES
+    f"pareto-{run_penalty}" for run_penalty in RUN_PENALTIES
 ]
 
 rule all:

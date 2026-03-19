@@ -913,7 +913,7 @@
          transform="translate(19.117526,-13.764948)" />
       <g
          id="g39"
-         inkscape:label="Joint-opt"
+         inkscape:label="pareto-opt"
          transform="translate(51.938558,-10.277493)"
          style="display:inline;opacity:1;mix-blend-mode:normal">
         <text
@@ -1846,7 +1846,7 @@
          x="110.36184"
          y="-9.6950903"
          id="text70"
-         inkscape:label="joint-opt-MS"><tspan
+         inkscape:label="pareto-opt-MS"><tspan
            sodipodi:role="line"
            x="110.36184"
            y="-9.6950903"

@@ -129,13 +129,13 @@ rule compute_ms_pareto:
         dataset = ancient(f"{DATA_DIR}/{{dataset}}.fa"),
         tool = ancient(f"{BASE_DIR}/kmercamel-local")
     output:
-        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/joint-{{run_penalty}}.fa"
+        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/pareto-{{run_penalty}}.fa"
     benchmark:
-        f"{BENCHMARK_DIR}/joint_optimization/{{dataset}}_{{k}}_{{run_penalty}}.tsv"
+        f"{BENCHMARK_DIR}/pareto_optimization/{{dataset}}_{{k}}_{{run_penalty}}.tsv"
     shell:
         f"""
             mkdir -p $(dirname {{output}})
-            {{input.tool}} compute -a joint -O runs -p {{wildcards.run_penalty}} -k {{wildcards.k}} {{input.dataset}} > {{output}}
+            {{input.tool}} compute -a pareto -O runs -p {{wildcards.run_penalty}} -k {{wildcards.k}} {{input.dataset}} > {{output}}
         """
 
 rule compute_ms_minone_kmercamel:
