@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <unistd.h>
 
+#include "kmers.h"
 #include "version.h"
 #include "ac/global_ac.h"
 #include "global.h"
@@ -103,6 +105,18 @@ void Version() {
 template <typename kmer_t, typename kh_wrapper_t>
 int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, int d_max, std::ostream *of, std::ostream *maskf, bool complements, bool masks,
                     std::string algorithm, bool lower_bound, bool assume_simplitigs, std::string objective, int penalty = 0) {
+    if (algorithm == "sorted-integers") {
+        auto *kMers = wrapper.kh_init_set();
+        ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
+        std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
+        wrapper.kh_destroy_set(kMers);
+
+        for (size_t i = 0; i < kMerVec.size(); ++i) kMerVec[i] = complements ? std::min(kMerVec[i], ReverseComplement(kMerVec[i], k)) : kMerVec[i];
+
+        std::sort(kMerVec.begin(), kMerVec.end());
+        PrintKmersAsIntegers(of, kMerVec, k);
+        return 0;
+    }
     if (masks) {
         WriteLog("Started optimization of a masked superstring from '" + path + "'.");
         int ret = Optimize(wrapper, kmer_type, algorithm, path, *of, k, complements);

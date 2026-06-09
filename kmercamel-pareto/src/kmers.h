@@ -1,16 +1,18 @@
 #pragma once
 
+#include <bitset>
 #include <string>
 #include <iostream>
 #include <cstdint>
+#include <cmath>
 
 #include "uint256_t/uint256_t.h"
-
-#include "ac/kmers_ac.h"
 
 typedef __uint128_t kmer128_t;
 typedef uint64_t kmer64_t;
 typedef uint256_t kmer256_t;
+
+#include "ac/kmers_ac.h"
 
 static const uint8_t nucleotideToInt[] = {
 		4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -159,4 +161,15 @@ void AddComplements(std::vector<kmer_t>& kMerVec, size_k_max k){
     size_t n = kMerVec.size();
     kMerVec.resize(n * 2);
     for (size_t i = 0; i < n; ++i) kMerVec[i + n] = ReverseComplement(kMerVec[i], k);
+}
+
+template<typename kmer_t, typename size_k_max>
+void PrintKmersAsIntegers(std::ostream *of, std::vector<kmer_t>& kMerVec, size_k_max k){
+    *of << std::bitset<sizeof(size_k_max)>(k);
+    if constexpr (sizeof(kmer_t) > 128 / 8) {
+        for (const auto& kmer : kMerVec) *of << std::bitset<sizeof(kmer_t) / 2>((unsigned long long)(kmer.upper())) << std::bitset<sizeof(kmer_t) / 2>((unsigned long long)(kmer.lower()));
+    } else {
+        for (const auto& kmer : kMerVec) *of << std::bitset<sizeof(kmer_t)>(kmer);
+    }
+    *of << std::endl;
 }
