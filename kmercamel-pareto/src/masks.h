@@ -2,7 +2,7 @@
 
 #include <string>
 #include <iostream>
-#include <glpk.h>
+#include "glpk.h"
 
 #include "parser.h"
 #include "khash_utils.h"
