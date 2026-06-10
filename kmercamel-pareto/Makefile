@@ -2,7 +2,7 @@
 
 CXX=         g++
 CXXFLAGS=    -g -Wall -Wno-unused-function -std=c++17 -O2 -I/opt/homebrew/include
-LDFLAGS=     -lz -lglpk -L/opt/homebrew/lib
+LDFLAGS=     -lz -L/opt/homebrew/lib
 LARGEFLAGS=  -DLARGE_KMERS
 ELARGEFLAGS=  -DEXTRA_LARGE_KMERS
 SRC=         src
