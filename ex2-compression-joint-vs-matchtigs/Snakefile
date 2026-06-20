@@ -2,18 +2,17 @@ include: "../snaketools/project_structure.smk"
 include: "../snaketools/download.smk"
 include: "../snaketools/compute.smk"
 include: "../snaketools/compress.smk"
+include: "../snaketools/test.smk"
 
 PLOT_SCRIPT = "plot_compressed_sizes.py"
 PLOT_FORMATS = ["png"]
 
 DATASETS = [
-    # "N._gonorrhoeae_pangenome",
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
     # "E._coli_pangenome",
 ]
-KS = [15, 31, 63]
-RUN_PENALTIES = [1, 7, 30, 70, 250, 400]
+KS = [31, 63]
 RSPSS_METHODS = [
     "eulertigs",
     "matchtigs",
@@ -22,8 +21,9 @@ MS_METHODS = [
     "greedy-maxone",
     "greedy-minrun",
 ] + [
-    f"pareto-{run_penalty}" for run_penalty in RUN_PENALTIES
+    f"pareto-{run_penalty}" for run_penalty in [1, 8, 32, 128, 256, 512]
 ]
+# Baseline method: essCompress
 
 rule all:
     input:
@@ -46,6 +46,13 @@ rule plot_compressed_sizes:
 
 rule compute_compressed_sizes:
     """
+    # COMPRESION PROTOCOLS - CURRENT
+    everything:
+        xz_9, xz_9 (MS -- mask, RPSS -- lengths of runs of ones + k)
+        xz_max, bzip2_best
+        geco3_l5, geco3_l5
+        geco3_max, geco3_max
+
     # COMPRESION PROTOCOLS - OLD
     #   a) rspss: (name, compr_superstring, compr_seqlens)
     ("std-basic", "xz_9", "xz_9"),
@@ -59,13 +66,6 @@ rule compute_compressed_sizes:
     ("std-max", "xz_max", "bz2_best"),
     ("geco-basic", "geco3_l5", "geco3_l5"),
     ("geco-max", "geco3_max", "geco3_max")
-
-    # COMPRESION PROTOCOLS - NEW
-    everything:
-        xz_9, xz_9 (MS -- mask, RPSS -- lengths of runs of ones + k)
-        xz_max, bzip2_best
-        geco3_l5, geco3_l5
-        geco3_max, geco3_max
     """
     input:
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring.xz"     for method in RSPSS_METHODS + MS_METHODS],
@@ -77,8 +77,12 @@ rule compute_compressed_sizes:
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.bz2"     for method in RSPSS_METHODS + MS_METHODS],
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.co"      for method in RSPSS_METHODS + MS_METHODS],
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.co.max"  for method in RSPSS_METHODS + MS_METHODS],
-        # [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.check" for method in RSPSS_METHODS + MS_METHODS], # Checks all computed representations contain the same number of k-mers
-         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"
+         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/essCompress.essc", # Baseline method
+         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt",
+        # Check that computed and compressed representations contain the same k-mer sets
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.fa.no-comp.check" for method in MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.fa.de-co.check" for method in MS_METHODS],
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.fa.de-co.max.check" for method in MS_METHODS]
     output:
         f"{RESULTS}/{{dataset}}/{{k}}.tsv"
     shell:
@@ -115,6 +119,9 @@ rule compute_compressed_sizes:
 
             KMER_COUNT=$(cat {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/kmer_count.txt)
             printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" "kmer_count" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" "$KMER_COUNT" >> {{output}}.tmp
+
+            BASELINE_SIZE=$(stat -c%s {SUPERSTRINGS}/{{wildcards.dataset}}/{{wildcards.k}}/essCompress.essc)
+            printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" "essCompress" "$BASELINE_SIZE" 0 "$BASELINE_SIZE" 0 "$BASELINE_SIZE" 0 "$BASELINE_SIZE" 0 >> {{output}}.tmp
 
             echo "method\tsuperstring_std_basic\tmask_std_basic\tsuperstring_std_max\tmask_std_max\tsuperstring_geco_basic\tmask_geco_basic\tsuperstring_geco_max\tmask_geco_max" > {{output}}
             sort {{output}}.tmp >> {{output}}

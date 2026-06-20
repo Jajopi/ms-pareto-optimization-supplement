@@ -7,22 +7,21 @@ PLOT_SCRIPT = "plot_memory_compressibility.py"
 PLOT_FORMATS = ["png"]
 
 DATASETS = [
-    # "N._gonorrhoeae_pangenome",
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
     # "E._coli_pangenome",
 ]
-KS = [15, 31, 63]
-RUN_PENALTIES = [1, 7, 30, 70, 250, 400]
+KS = [15, 31]
 RSPSS_METHODS = [
     "eulertigs",
     "matchtigs",
 ]
 MS_METHODS = [
+    "greedy-minone",
     "greedy-maxone",
     "greedy-minrun",
 ] + [
-    f"pareto-{run_penalty}" for run_penalty in RUN_PENALTIES
+    f"pareto-{run_penalty}" for run_penalty in [1, 8, 32, 128, 256, 512]
 ]
 COUNT_METHODS = [
     "lowerbound_length",
@@ -51,7 +50,7 @@ rule compute_compressed_sizes:
     input:
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.superstring" for method in RSPSS_METHODS + MS_METHODS],
         [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.mask.efe"    for method in RSPSS_METHODS + MS_METHODS],
-         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"
+        [f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{method}.txt" for method in COUNT_METHODS]
     output:
         f"{RESULTS}/{{dataset}}/{{k}}.tsv"
     shell:

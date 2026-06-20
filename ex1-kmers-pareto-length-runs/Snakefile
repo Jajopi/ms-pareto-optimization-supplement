@@ -7,7 +7,6 @@ PLOT_SCRIPT_RUNS_VS_LENGTH = "plot_length_vs_runs.py"
 PLOT_FORMATS = ["png"]
 
 DATASETS = [
-    # "N._gonorrhoeae_pangenome",
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
     # "E._coli_pangenome",
@@ -19,7 +18,6 @@ SUPERSTRING_METHODS = [
     "simplitigs",
     "eulertigs",
     "matchtigs",
-    # "optimal_matchtigs",
     "greedy-minone",
     "greedy-maxone",
     "greedy-minrun",
