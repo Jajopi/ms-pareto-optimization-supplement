@@ -3,9 +3,11 @@
 include: "project_structure.smk"
 
 GGCAT_FLAGS = "-j 1 -s 1 -m 2 -p -t .temp"
-JELLYFISH_FLAGS = "-s 100M -t 1 -C"
+JELLYFISH_FLAGS = "-s 500M -t 1 -C"
 
+LOCAL_KMERCAMEL = f"{BASE_DIR}/kmercamel/kmercamel-pareto/kmercamel"
 KMER_COUNTER_MS_SCRIPT = f"{BASE_DIR}/tools/kmer_counter_ms.py"
+SUPERSTRING_SCRAMBLE_SCRIPT = f"{BASE_DIR}/tools/scramble_superstring.py"
 BLOSSOM5 = f"{BASE_DIR}/tools/blossom5/blossom5"
 
 rule compute_kmer_count_jellyfish:
@@ -21,34 +23,15 @@ rule compute_kmer_count_jellyfish:
             rm {{output}}.tmp
         """
 
-rule check_kmer_count:
+rule compute_lowerbound_matchtig_count:
     input:
-        right_count_file=ancient(f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"),
-        tested_file=ancient(f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.fa")
-    output:
-        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.check"
-    shell:
-        f"""
-            mkdir -p $(dirname {{output}})
-            RIGHT_COUNT=$(cat {{input.right_count_file}})
-            ACTUAL_COUNT=$(cat {{input.tested_file}} | {KMER_COUNTER_MS_SCRIPT} {{wildcards.k}})
-            if [[ "$RIGHT_COUNT" -ne "$ACTUAL_COUNT" ]]; then
-                echo "k-mer count mismatch for {{input.tested_file}}: $RIGHT_COUNT != $ACTUAL_COUNT" >&2
-                exit 1
-            fi
-            touch {{output}}
-        """
-
-rule compute_lowerbound_matchtig_count_pareto:
-    input:
-        dataset = ancient(f"{DATA_DIR}/{{dataset}}.fa"),
-        tool = ancient(f"{BASE_DIR}/kmercamel-pareto")
+        ancient(f"{DATA_DIR}/{{dataset}}.fa")
     output:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/lowerbound_matchtig_count.txt"
     shell:
         f"""
             mkdir -p $(dirname {{output}})
-            {{input.tool}} lowerbound -k {{wildcards.k}} -O matchtig-count {{input.dataset}} > {{output}}
+            {LOCAL_KMERCAMEL} lowerbound -k {{wildcards.k}} -O matchtig-count {{input}} > {{output}}
         """
 
 rule compute_lowerbound_length_kmercamel:
@@ -126,16 +109,17 @@ rule convert_ggcat_or_matchtigs_output_to_ms:
 
 rule compute_ms_pareto:
     input:
-        dataset = ancient(f"{DATA_DIR}/{{dataset}}.fa"),
-        tool = ancient(f"{BASE_DIR}/kmercamel-local")
+        ancient(f"{DATA_DIR}/{{dataset}}.fa")
     output:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/pareto-{{run_penalty}}.fa"
+    wildcard_constraints:
+        run_penalty="\\d+"
     benchmark:
         f"{BENCHMARK_DIR}/pareto_optimization/{{dataset}}_{{k}}_{{run_penalty}}.tsv"
     shell:
         f"""
             mkdir -p $(dirname {{output}})
-            {{input.tool}} compute -a pareto -O runs -p {{wildcards.run_penalty}} -k {{wildcards.k}} {{input.dataset}} > {{output}}
+            {LOCAL_KMERCAMEL} compute -a pareto -O runs -p {{wildcards.run_penalty}} -k {{wildcards.k}} {{input}} > {{output}}
         """
 
 rule compute_ms_minone_kmercamel:
