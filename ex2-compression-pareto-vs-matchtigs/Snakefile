@@ -1,8 +1,8 @@
-include: "../snaketools/project_structure.smk"
-include: "../snaketools/download.smk"
-include: "../snaketools/compute.smk"
-include: "../snaketools/compress.smk"
-include: "../snaketools/test.smk"
+include: "../tools/project_structure.smk"
+include: "../tools/download.smk"
+include: "../tools/compute.smk"
+include: "../tools/compress.smk"
+include: "../tools/test.smk"
 
 PLOT_SCRIPT = "plot_compressed_sizes.py"
 PLOT_FORMATS = ["png"]
