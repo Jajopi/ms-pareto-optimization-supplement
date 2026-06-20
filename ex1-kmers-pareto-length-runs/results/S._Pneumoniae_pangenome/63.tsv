@@ -14,7 +14,7 @@ pareto-512	25074976	13738
 pareto-64	19892589	40315
 pareto-8	19276131	59348
 kmer_count	-1	14629087
-lowerbound_length	19259588	-1
+lowerbound_length	19259409	-1
 lowerbound_matchtig_count	-1	2184
 matchtigs	20320066	52610
 simplitigs	23491244	142939
