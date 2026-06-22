@@ -13,7 +13,7 @@ else
     conda activate "$ENV_NAME"
     conda config --add channels conda-forge
     conda config --add channels bioconda
-    conda install snakemake kmercamel xz GeCo3 matchtigs bioconda::jellyfish
+    conda install GeCo3 ggcat bioconda::jellyfish kmercamel matchtigs snakemake xz
     pip install matplotlib
 fi
 
