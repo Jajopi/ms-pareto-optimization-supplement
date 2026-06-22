@@ -73,7 +73,7 @@ rule compute_optimal_matchtigs_blossom5:
         """
 
 def get_ggcat_flag_for_input(input_type):
-    if input_type == "matchtigs": return "-g"
+    if input_type == "matchtigs": return "--greedy-matchtigs"
     if input_type == "eulertigs": return "--eulertigs"
     if input_type == "unitigs": return ""
     raise Exception(f"Invalid input type specified: {input_type}.")
