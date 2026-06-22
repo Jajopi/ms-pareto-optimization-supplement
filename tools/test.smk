@@ -44,7 +44,7 @@ rule prepare_not_compressed_ms_for_jellyfish:
             kmercamel ms2spss -k {{wildcards.k}} -o {{output}} {{input}}
         """
 
-rule check_kmer_counts_in_regular_and_compressed_files:
+rule check_kmer_set_equality_in_regular_and_compressed_files:
     input:
         right_count_file=ancient(f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"),
         tested_count_file=ancient(f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.fa.{{decompression_type}}.kmer_count.txt"),
