@@ -4,7 +4,7 @@ Supplementary repository for paper
 [Pareto optimization of masked superstrings improves compression of pan-genome k-mer sets](https://www.biorxiv.org/content/10.64898/2026.03.18.712440).
 
 This repository contains the implementation of *Pareto optimization of masked superstrings for k-mer sets*
-and computation of lower bound for the number of runs of ones in the mask (or the number of matchtigs).
+and computation of *lower bound for the number of runs of ones in the mask* (lower bound for the number of matchtigs).
 
 It also contains Snakemake pipelines reproducing the results from the paper,
 and uses conda to manage software versions and most of the dependencies.
