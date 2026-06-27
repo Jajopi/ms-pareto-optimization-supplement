@@ -33,6 +33,7 @@ Next time, you only need to activate the conda environment with:
 
 To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`, ...) and run:
 ```bash
+    rm -rf results/<dataset which you want to recompute>
     snakemake -j <number_of_threads_to_use> <any_optional_parameters_of_snakemake>
 ```
 
