@@ -6,7 +6,6 @@ set -euo pipefail
 conda config --add channels conda-forge
 conda config --add channels bioconda
 conda install GeCo3 ggcat bioconda::jellyfish kmercamel snakemake xz
-pip install matplotlib
 
 # Those dependencies are not distributed through conda, so they are included in the repository:
 
