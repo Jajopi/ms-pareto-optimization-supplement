@@ -73,20 +73,6 @@ rule compute_greedy_simplitigs_kmercamel:
             kmercamel compute -a local -d 1 -k {{wildcards.k}} {{input}} > {{output}}
         """
 
-rule compute_optimal_matchtigs_blossom5:
-    input:
-        unitigs = ancient(f"{SUPERSTRINGS}/{{dataset}}/{{k}}/unitigs.no-ms.fa"),
-        blossom5 = ancient(BLOSSOM5)
-    output:
-        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/optimal_matchtigs.no-ms.fa"
-    benchmark:
-        f"{BENCHMARK_DIR}/optimal_matchtigs/{{dataset}}_{{k}}.tsv"
-    shell:
-        f"""
-            mkdir -p $(dirname {{output}})
-            matchtigs -k {{wildcards.k}} -t 1 --fa-in {{input.unitigs}} --matchtigs-fa-out {{output}} --blossom5-command {{input.blossom5}} 2> /dev/null
-        """
-
 def get_ggcat_flag_for_input(input_type):
     if input_type == "matchtigs": return "--greedy-matchtigs"
     if input_type == "eulertigs": return "--eulertigs"
