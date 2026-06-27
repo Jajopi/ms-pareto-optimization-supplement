@@ -28,6 +28,8 @@ rule compute_kmer_count_in_spss_jellyfish:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.fa"
     output:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.kmer_count.txt"
+    wildcard_constraints:
+        method=r"[^.]*" # any string without a dot
     shell:
         f"""
             mkdir -p $(dirname {{output}})
