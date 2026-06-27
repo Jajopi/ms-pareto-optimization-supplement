@@ -17,7 +17,9 @@ else
     pip install matplotlib
 fi
 
-# Pareto optimization, matchtig count lowerbound, sorted integers
+# Those dependencies are not distributed through conda, so they are included in the repository
+
+# Our-work - Pareto optimization, matchtig count lowerbound, sorted integers
 make -C kmercamel-pareto
 
 # Elias-Fano encoding
