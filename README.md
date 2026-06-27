@@ -1,13 +1,15 @@
 # Pareto optimization of masked superstrings
 
 Supplementary repository for paper
-*Pareto optimization of masked superstrings improves compression of pan-genome k-mer sets*. [**TODO** add bioRxiv link when possible]
+[Pareto optimization of masked superstrings improves compression of pan-genome k-mer sets](https://www.biorxiv.org/content/10.64898/2026.03.18.712440).
 
-This repository contains the implementation of Pareto optimization of masked superstrings for k-mer sets
+This repository contains the implementation of *Pareto optimization of masked superstrings for k-mer sets*
 and computation of lower bound for the number of runs of ones in the mask (or the number of matchtigs).
 
 It also contains Snakemake pipelines reproducing the results from the paper,
 and uses conda to manage software versions and most of the dependencies.
+
+We plan to also add the exact scripts creating the figures in the paper; however, this is currently still a TODO.
 
 In case of any questions, feel free to ask by an [email](mailto:janci@kam.mff.cuni.cz).
 
@@ -27,13 +29,12 @@ Next time, you only need to activate the conda environment with:
 
 ### Run
 
-To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`, `ex3-...`) and run:
+To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`, ...) and run:
 ```bash
-    snakemake -j <number_of_threads> <any_optional_parameters>
+    snakemake -j <number_of_threads_to_use> <any_optional_parameters_of_snakemake>
 ```
 
-Experiments produce `.tsv` files with results and plots
-(**TODO** link new R plotting scripts to work from pipeline instead of manually).
+Experiments produce `.tsv` files with results (and, in the future, plots).
 
 ### Modify
 
@@ -50,7 +51,7 @@ Default names are:
 - Datasets are downloaded into `data` directory.
 - Computed superstring representations are stored in `computed` directory
   (it is recommended to turn off file search indexing for this directory).
-- Results are stored in respective numbered directories (`ex1-...`, `ex2-...`, ...).
+- Results are stored in respective numbered directories (`ex1-...`, `ex2-...`, ...) in a `results` subdirectories.
 
 ### Datasets
 
@@ -59,7 +60,9 @@ Add the dataset name and url, the pipeline downloads datasets automatically
 and can handle `xz`-compressed and uncompressed FASTA files.
 
 In case you need to support other compression formats,
-the simplest way is to modify the `download_data` rule in `tools/download.smk`.
+you can modify the `download_data` rule in `tools/download.smk`,
+but probably the simplest way is to just download and extract the file by yourself,
+in which case the downloading part of the pipeline is not used at all.
 
 ## Implementation
 
