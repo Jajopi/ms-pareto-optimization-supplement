@@ -3,7 +3,6 @@ eulertigs	23381481
 greedy-maxone	17851754
 kmer_count	14629087
 matchtigs	17851916
-method	distinct kmers in the mask
 pareto-1	17807155
 pareto-128	16178508
 pareto-256	15693397

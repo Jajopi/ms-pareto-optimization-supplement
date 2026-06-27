@@ -7,7 +7,6 @@ kmer_count	-1	6634375
 lowerbound_length	7534023	-1
 lowerbound_matchtig_count	-1	26
 matchtigs	8565261	65396
-method	superstring	mask
 pareto-128	9900395	567
 pareto-16	8002980	52014
 pareto-1	7538205	126647

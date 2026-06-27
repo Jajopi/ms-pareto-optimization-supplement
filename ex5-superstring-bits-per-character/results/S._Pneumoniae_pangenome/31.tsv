@@ -2,7 +2,6 @@ method	length	compressed size geco	compressed size xz
 eulertigs	14359547	17429824	21791424
 greedy-maxone	11969688	13185496	17266208
 matchtigs	12812401	13547976	17843104
-method	length	compressed size geco	compressed size xz
 pareto-1	11970424	13107936	17223552
 pareto-128	14216466	11638560	17033376
 pareto-256	15886880	11414544	17337216
