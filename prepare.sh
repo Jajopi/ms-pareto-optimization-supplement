@@ -14,7 +14,7 @@ make -C kmercamel-pareto
 
 # Elias-Fano encoding for ex3
 {
-  cd tools/EliasFano/2i_bench; cmake .; cd ../../../
-  make -C tools/EliasFano/2i_bench
+  cd tools/EliasFano/2i_bench; rm CMakeCache.txt; cmake . -DCMAKE_POLICY_VERSION_MINIMUM=3.5; cd ../../../
+  make -C tools/EliasFano/2i_bench # This thing is old and weird and I was only able to get it compiled to 25%, but that's apparently enough
   make -C tools/EliasFano
-} || true # This thing is old and weird and I was only able to get it compiled to 25%, but that's apparently enough
+} || true
