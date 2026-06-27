@@ -10,11 +10,24 @@ KMER_COUNTER_MS_SCRIPT = f"{BASE_DIR}/tools/kmer_counter_ms.py"
 SUPERSTRING_SCRAMBLE_SCRIPT = f"{BASE_DIR}/tools/scramble_superstring.py"
 BLOSSOM5 = f"{BASE_DIR}/tools/blossom5/blossom5"
 
-rule compute_kmer_count_jellyfish:
+rule compute_kmer_count_in_dataset_jellyfish:
     input:
         ancient(f"{DATA_DIR}/{{dataset}}.fa")
     output:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/kmer_count.txt"
+    shell:
+        f"""
+            mkdir -p $(dirname {{output}})
+            jellyfish count {JELLYFISH_FLAGS} -m {{wildcards.k}} -o {{output}}.tmp {{input}}
+            jellyfish stats {{output}}.tmp | head -n 2 | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2 > {{output}}
+            rm {{output}}.tmp
+        """
+
+rule compute_kmer_count_in_spss_jellyfish:
+    input:
+        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.fa"
+    output:
+        f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.kmer_count.txt"
     shell:
         f"""
             mkdir -p $(dirname {{output}})

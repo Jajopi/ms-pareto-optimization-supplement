@@ -4,7 +4,7 @@ include: "project_structure.smk"
 
 JELLYFISH_FLAGS = "-s 500M -t 1 -C"
 
-rule compute_kmer_count_in_ms_jellyfish:
+rule compute_kmer_count_in_decompressed_ms_jellyfish:
     input:
         f"{SUPERSTRINGS}/{{dataset}}/{{k}}/{{method}}.fa.{{decompression_type}}{{merged_or_not}}"
     output:
