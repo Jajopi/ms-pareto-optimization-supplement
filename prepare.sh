@@ -5,7 +5,7 @@ set -euo pipefail
 # Almost all dependencies are installed through conda, except for the ones listed below in this file:
 conda config --add channels conda-forge
 conda config --add channels bioconda
-conda install GeCo3 ggcat bioconda::jellyfish kmercamel snakemake xz
+conda install GeCo3=1.0 ggcat=2.0.0 bioconda::jellyfish=2.2.10 kmercamel=2.2.0 snakemake=9.22.0 xz=5.8.1 bzip2=1.0.8
 
 # Those dependencies are not distributed through conda, so they are included in the repository:
 
