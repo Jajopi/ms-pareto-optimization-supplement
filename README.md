@@ -66,7 +66,7 @@ in which case the downloading part of the pipeline is not used at all.
 
 ## Implementation
 
-Details about the implementation are provided in separate [README](./kmercamel-pareto/README.md).
+Details about the implementation are linked in separate [README](./kmercamel-pareto/README.md).
 
 The work was implemented inside a fork of KmerCamel🐫 and then copied over to another fork,
 which resulted in a weird commit history cor a while.
