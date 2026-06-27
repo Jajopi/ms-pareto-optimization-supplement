@@ -38,6 +38,9 @@ To run an experiment, move to the corresponding directory (`ex1-...`, `ex2-...`,
 ```
 
 Experiments produce `.tsv` files with results (and, in the future, plots).
+If you used `git clone` to obtain the repository, you can compare them to the original results using `git diff results`. 
+
+Example snakemake configuration: `snakemake -j 10 --rerun-incomplete --resources mem_mb=26000`
 
 ### Modify
 
