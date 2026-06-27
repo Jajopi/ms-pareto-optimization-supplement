@@ -75,7 +75,7 @@ in which case the downloading part of the pipeline is not used at all.
 Details about the implementation are linked in separate [README](./kmercamel-pareto/README.md).
 
 The work was implemented inside a fork of KmerCamel🐫 and then copied over to another fork,
-which resulted in a weird commit history cor a while.
+which resulted in a weird commit history for a while.
 Now it is settled like this:
 - the first commit contains the history of original KmerCamel🐫, which has been forked.
 - the relevant changes (Pareto optimization implementation) are in the second commit made by @Jajopi
