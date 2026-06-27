@@ -66,6 +66,11 @@ the simplest way is to modify the `download_data` rule in `tools/download.smk`.
 Details about the implementation are provided in separate [README](./kmercamel-pareto/README.md).
 
 The work was implemented inside a fork of KmerCamel🐫 and then copied over to another fork,
-which results in a weird commit history with most of the relevant changes in the first commit made by @Jajopi
+which resulted in a weird commit history cor a while.
+Now it is settled like this:
+- the first commit contains the history of original KmerCamel🐫, which has been forked.
+- the relevant changes (Pareto optimization implementation) are in the second commit made by @Jajopi
 ([d86ccf1a6b8007a6cb8680bb46f47a91ef058beb](https://github.com/Jajopi/ms-pareto-optimization-supplement/commit/d86ccf1a6b8007a6cb8680bb46f47a91ef058beb)).
+
 The main concept (Pareto optimization) was internally called Joint optimization for a long time.
+All occurences in the files should be up to date; however, you may encounter the old name in the history.
