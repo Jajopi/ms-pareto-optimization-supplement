@@ -3,9 +3,6 @@ include: "../tools/download.smk"
 include: "../tools/compute.smk"
 include: "../tools/compress.smk"
 
-PLOT_SCRIPT_RUNS_VS_LENGTH = "plot_length_vs_runs.py"
-PLOT_FORMATS = ["png"]
-
 DATASETS = [
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
@@ -32,34 +29,7 @@ COUNT_METHODS = [
 
 rule all:
     input:
-        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS),
-        expand(f"{RESULTS}/{{dataset}}/plot-combined.{{plot_format}}", dataset = DATASETS, plot_format = PLOT_FORMATS),
-
-rule plot_lengths_and_run_counts_combined:
-    priority: 3
-    input:
-        expand("{{results}}/{{dataset}}/{k}.tsv", k = KS)
-    output:
-        f"{{results}}/{{dataset}}/plot-combined.{{plot_format}}"
-    wildcard_constraints:
-        results = RESULTS,
-    shell:
-        f"""
-            ./{PLOT_SCRIPT_RUNS_VS_LENGTH} {RESULTS}/{{wildcards.dataset}}/ {{wildcards.plot_format}}
-        """
-
-rule plot_lengths_and_run_counts_separate:
-    priority: 2
-    input:
-        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
-    output:
-        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}"
-    wildcard_constraints:
-        k = "\\d+",
-    shell:
-        f"""
-            ./{PLOT_SCRIPT_RUNS_VS_LENGTH} {{input}} {{wildcards.plot_format}}
-        """
+        expand(f"{RESULTS}/{{dataset}}/{{k}}.tsv", dataset = DATASETS, k = KS)
 
 rule compute_lengths_and_run_counts:
     priority: 1

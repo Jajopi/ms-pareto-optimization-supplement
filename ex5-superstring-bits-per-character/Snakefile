@@ -3,9 +3,6 @@ include: "../tools/download.smk"
 include: "../tools/compute.smk"
 include: "../tools/compress.smk"
 
-PLOT_SCRIPT = "plot_bits_per_character.py"
-PLOT_FORMATS = ["png"]
-
 DATASETS = [
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
@@ -24,20 +21,7 @@ MS_METHODS = [
 
 rule all:
     input:
-        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS)
-
-rule plot_bits_per_character:
-    priority: 3
-    input:
-        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
-    output:
-        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}"
-    wildcard_constraints:
-        k = "\\d+"
-    shell:
-        f"""
-            ./{PLOT_SCRIPT} {{input}} {{wildcards.k}} {{wildcards.plot_format}}
-        """
+        expand(f"{RESULTS}/{{dataset}}/{{k}}.tsv", dataset = DATASETS, k = KS)
 
 rule compute_bits_per_character_data:
     input:

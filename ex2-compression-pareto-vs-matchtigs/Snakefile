@@ -4,9 +4,6 @@ include: "../tools/compute.smk"
 include: "../tools/compress.smk"
 include: "../tools/test.smk"
 
-PLOT_SCRIPT = "plot_compressed_sizes.py"
-PLOT_FORMATS = ["png"]
-
 DATASETS = [
     "S._Pneumoniae_pangenome",
     # "SARS-CoV-2_pangenome",
@@ -27,22 +24,7 @@ MS_METHODS = [
 
 rule all:
     input:
-        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS),
-        expand(f"{RESULTS}/{{dataset}}/plot-{{k}}-best.{{plot_format}}", dataset = DATASETS, k = KS, plot_format = PLOT_FORMATS)
-
-rule plot_compressed_sizes:
-    priority: 3
-    input:
-        f"{RESULTS}/{{dataset}}/{{k}}.tsv"
-    output:
-        f"{RESULTS}/{{dataset}}/plot-{{k}}.{{plot_format}}",
-        f"{RESULTS}/{{dataset}}/plot-{{k}}-best.{{plot_format}}"
-    wildcard_constraints:
-        k = "\\d+"
-    shell:
-        f"""
-            ./{PLOT_SCRIPT} {{input}} {{wildcards.k}} {{wildcards.plot_format}}
-        """
+        expand(f"{RESULTS}/{{dataset}}/{{k}}.tsv", dataset = DATASETS, k = KS)
 
 rule compute_compressed_sizes:
     """
