@@ -1,11 +1,11 @@
 method	distinct kmers in the mask
 eulertigs	9116039
 greedy-maxone	6179407
-kmer_count	5240017
-matchtigs	6083663
 pareto-128	5384838
 pareto-1	6094763
 pareto-256	5376986
 pareto-32	5442219
 pareto-512	5370325
 pareto-8	5776913
+kmer_count	5240017
+matchtigs	6083663
