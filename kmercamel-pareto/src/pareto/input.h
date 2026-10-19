@@ -10,7 +10,7 @@
 
 /// Sort k-mers with key_bits significant bits
 template <typename kmer_t>
-void ParallelSort(typename std::vector<kmer_t>::iterator begin, typename std::vector<kmer_t>::iterator end, int key_bits){
+void ParallelSort(typename std::vector<kmer_t>::iterator begin, typename std::vector<kmer_t>::iterator end, int threads, int key_bits){
     std::sort(begin, end);
 }
 
@@ -27,12 +27,12 @@ void MergeSortedRuns(std::vector<kmer_t> &kMers, size_t middle){
 
 /// Add reverse complements to sorted canonical k-mers, keeping them sorted (self-complementary k-mers end up twice)
 template <typename kmer_t>
-void AddComplementsSorted(std::vector<kmer_t> &kMers, size_k_max k){
+void AddComplementsSorted(std::vector<kmer_t> &kMers, size_k_max k, int threads){
     size_t n = kMers.size();
-    if (!std::is_sorted(kMers.begin(), kMers.end())) ParallelSort<kmer_t>(kMers.begin(), kMers.end(), 2 * k);
+    if (!std::is_sorted(kMers.begin(), kMers.end())) ParallelSort<kmer_t>(kMers.begin(), kMers.end(), threads, 2 * k);
     kMers.resize(2 * n);
     for (size_t i = 0; i < n; ++i) kMers[n + i] = ReverseComplement(kMers[i], k);
-    ParallelSort<kmer_t>(kMers.begin() + n, kMers.end(), 2 * k);
+    ParallelSort<kmer_t>(kMers.begin() + n, kMers.end(), threads, 2 * k);
     MergeSortedRuns(kMers, n);
 }
 
@@ -40,7 +40,7 @@ void AddComplementsSorted(std::vector<kmer_t> &kMers, size_k_max k){
 /// Occurrences are buffered and periodically sorted, deduplicated and merged, a small table of recently seen k-mers
 /// filters most repetitions (e.g. overlaps of unitigs). The result has capacity for the reverse complements.
 template <typename kmer_t>
-std::vector<kmer_t> ReadKMersSorted(std::string &path, int k, bool complements){
+std::vector<kmer_t> ReadKMersSorted(std::string &path, int k, bool complements, int threads){
     gzFile fp = OpenFile(path);
     kseq_t *seq = kseq_init(fp);
 
@@ -54,7 +54,7 @@ std::vector<kmer_t> ReadKMersSorted(std::string &path, int k, bool complements){
     int filter_bits = MIN_FILTER_BITS;
     std::vector<kmer_t> recently_seen(size_t(1) << filter_bits, NO_KMER);
     auto compact = [&](){
-        ParallelSort<kmer_t>(kMers.begin() + sorted_size, kMers.end(), 2 * k);
+        ParallelSort<kmer_t>(kMers.begin() + sorted_size, kMers.end(), threads, 2 * k);
         kMers.erase(std::unique(kMers.begin() + sorted_size, kMers.end()), kMers.end());
         MergeSortedRuns(kMers, sorted_size);
         kMers.erase(std::unique(kMers.begin(), kMers.end()), kMers.end());

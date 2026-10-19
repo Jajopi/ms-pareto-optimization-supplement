@@ -87,6 +87,7 @@ int usage_subcommand(std::string subcommand) {
     if (subcommand == "compute") {
     std::cerr << "  -O STR   - objective for pareto optimization, either 'runs' or 'zeros'" << std::endl;
     std::cerr << "  -p INT   - pareto: penalty per run or per zero; default 7 for runs, 2 for zeros" << std::endl;
+    std::cerr << "  -t INT   - pareto: number of threads; default 1 (results with more threads are not deterministic)" << std::endl;
     } else if (subcommand == "lowerbound")
     std::cerr << "  -O STR   - objective, either 'runs' or 'zeros' for pareto optimization, or 'matchtig-count'" << std::endl;
     std::cerr << "  -h       - print help" << std::endl;
@@ -143,7 +144,7 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
     }
     /* Pareto optimization reads k-mers directly into a sorted vector. */
     else if (algorithm == ALG_PARETO) {
-        std::vector<kmer_t> kMerVec = ReadKMersSorted<kmer_t>(path, k, complements);
+        std::vector<kmer_t> kMerVec = ReadKMersSorted<kmer_t>(path, k, complements, pareto.threads);
         if (kMerVec.empty()) {
             std::cerr << "Path '" << path << "' contains no k-mers. Make sure that your file is a FASTA or gzipped FASTA." << std::endl;
             return usage_subcommand(lower_bound ? "lowerbound" : "compute");
@@ -241,7 +242,7 @@ int camel_compute(int argc, char **argv) {
     bool pareto_option_set = false;
     int opt;
     try {
-        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:p:"))  != -1) {
+        while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:p:t:"))  != -1) {
             switch(opt) {
                 case 'o':
                     output.open(optarg);
@@ -275,6 +276,10 @@ int camel_compute(int argc, char **argv) {
                     break;
                 case 'p':
                     pareto.penalty = std::stoi(optarg);
+                    pareto_option_set = true;
+                    break;
+                case 't':
+                    pareto.threads = std::stoi(optarg);
                     pareto_option_set = true;
                     break;
                 case 'h':
@@ -313,13 +318,13 @@ int camel_compute(int argc, char **argv) {
         std::cerr << "Optimization for the input being simplitigs is possible only with global." << std::endl;
         return usage_subcommand(subcommand);
     } else if (algorithm != ALG_PARETO && (pareto_option_set || !pareto.objective.empty())) {
-        std::cerr << "Options -O and -p are only valid with the 'pareto' algorithm." << std::endl;
+        std::cerr << "Options -O, -p and -t are only valid with the 'pareto' algorithm." << std::endl;
         return usage_subcommand(subcommand);
     } else if (algorithm == ALG_PARETO && pareto.objective != "runs" && pareto.objective != "zeros") {
         std::cerr << "Pareto optimization needs an objective: either -O runs or -O zeros." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm == ALG_PARETO && (pareto.penalty < 0 || pareto.penalty > 65535)) {
-        std::cerr << "Penalty (-p) has to be between 0 (default) and 65535." << std::endl;
+    } else if (algorithm == ALG_PARETO && (pareto.penalty < 0 || pareto.penalty > 65535 || pareto.threads < 1)) {
+        std::cerr << "Penalty (-p) has to be between 0 (default) and 65535 and the number of threads (-t) positive." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {

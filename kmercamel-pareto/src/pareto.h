@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <algorithm>
 #include <limits>
 
 #include "kmers.h"
@@ -43,9 +42,14 @@ bool ParetoOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_
             penalty = (objective == ParetoObjective::RUNS) ? DEFAULT_PENALTY_RUNS : DEFAULT_PENALTY_ZEROS;
             WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
         }
+        if (options.threads < 1) throw std::invalid_argument("Number of threads has to be positive");
+#ifndef _OPENMP
+        if (options.threads > 1) WriteLog("Compiled without OpenMP, running with a single thread.");
+        options.threads = 1;
+#endif
 
-        if (complements) AddComplementsSorted(kMerVec, k);
-        else if (!std::is_sorted(kMerVec.begin(), kMerVec.end())) ParallelSort<kmer_t>(kMerVec.begin(), kMerVec.end(), 2 * k);
+        if (complements) AddComplementsSorted(kMerVec, k, options.threads);
+        else if (!std::is_sorted(kMerVec.begin(), kMerVec.end())) ParallelSort<kmer_t>(kMerVec.begin(), kMerVec.end(), options.threads, 2 * k);
         WriteLog("Finished sorting k-mers.");
 
         size_t n = kMerVec.size(), value;

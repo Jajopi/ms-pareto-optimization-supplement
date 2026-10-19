@@ -1,8 +1,10 @@
 .PHONY: all clean test cpptest converttest verify quick-verify
 
 CXX=         g++
-CXXFLAGS=    -g -Wall -Wno-unused-function -std=c++17 -O2 -I/opt/homebrew/include
-LDFLAGS=     -lz -L/opt/homebrew/lib
+# OpenMP for pareto optimization threads (disable by OMPFLAGS=)
+OMPFLAGS?=   -fopenmp
+CXXFLAGS=    -g -Wall -Wno-unused-function -std=c++17 -O2 -I/opt/homebrew/include $(OMPFLAGS)
+LDFLAGS=     -lz -L/opt/homebrew/lib $(OMPFLAGS)
 LARGEFLAGS=  -DLARGE_KMERS
 ELARGEFLAGS=  -DEXTRA_LARGE_KMERS
 SRC=         src

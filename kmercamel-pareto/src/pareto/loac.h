@@ -8,6 +8,10 @@
 #include <string>
 #include <stdexcept>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "../kmers.h"
 #include "objective.h"
 #include "index.h"
@@ -15,6 +19,27 @@
 size_t RANDOM_SEED = 0;
 size_t MAX_COUNT_WIDTH = 12;
 size_t MAX_ITERS_WIDTH = 3;
+
+/// Arrays shared by parallel searches are accessed with relaxed atomics (no ordering is needed, only no torn values)
+template <typename T> inline T relaxed_load(const T &x){ return __atomic_load_n(&x, __ATOMIC_RELAXED); }
+template <typename T> inline void relaxed_store(T &x, T value){ __atomic_store_n(&x, value, __ATOMIC_RELAXED); }
+/// Raise x to value if it is lower (a concurrent search must never lower remaining priorities)
+template <typename T> inline void relaxed_store_max(T &x, T value){
+    T current = __atomic_load_n(&x, __ATOMIC_RELAXED);
+    while (current < value && !__atomic_compare_exchange_n(&x, &current, value, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+}
+/// Set x to value only if it still holds expected
+template <typename T> inline void relaxed_replace(T &x, T expected, T value){
+    __atomic_compare_exchange_n(&x, &expected, value, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+}
+
+inline int pareto_thread_id(){
+#ifdef _OPENMP
+    return omp_get_thread_num();
+#else
+    return 0;
+#endif
+}
 
 /// Heuristic search for the pareto optimization on the Aho-Corasick automaton of the k-mers, represented only by sorted leaves.
 /// A node is given by the index of its first leaf and its depth.
@@ -24,6 +49,10 @@ class LeafOnlyAC {
     static constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
     static constexpr const size_t NO_PARENT = std::numeric_limits<size_t>::max();
     static constexpr const size_k_max PRIORITY_SATURATION = std::numeric_limits<priority_t>::max();
+
+    static constexpr const size_t BATCH_FRACTION = 32;          /// Parallel batch is at most this fraction of the uncompleted leaves,
+    static constexpr const size_t MIN_BATCH_PER_THREAD = 64;    /// but at least this ...
+    static constexpr const size_t MAX_BATCH_PER_THREAD = 2048;  /// ... and at most this times the number of threads
 
     struct SearchEntry {
         size_n_max node;
@@ -39,7 +68,7 @@ class LeafOnlyAC {
         bool restored;
         size_t parent;
     };
-    /// State of a search
+    /// Thread-local state of a search
     struct SearchContext {
         std::vector<SearchEntry> stack;
         std::vector<LogEntry> log;
@@ -47,12 +76,18 @@ class LeafOnlyAC {
         size_n_max target;                                   /// Result: leaf to connect to
         std::vector<size_n_max> path;                        /// and reused leaves on the way
     };
+    struct SearchResult {
+        size_n_max origin;
+        size_n_max target = INVALID_NODE;
+        std::vector<size_n_max> path;
+    };
 
     const size_k_max        K;
     const size_n_max        N;                      /// Number of leaves (k-mers)
     const bool              COMPLEMENTS;
     const ParetoObjective   OBJECTIVE;
     const size_k_max        PENALTY;
+    const int               THREADS;
     const size_k_max        MAX_BUDGET;             /// Every connection not passing through the root costs less
 
     const std::vector<kmer_t>&       kMers;
@@ -69,19 +104,21 @@ class LeafOnlyAC {
     std::vector<uint64_t> has_backtrack;            /// Bitvector over leaves with rank, built before printing
     std::vector<size_t>   has_backtrack_rank;
 
-    SearchContext context;
+    std::vector<SearchContext> contexts;            /// One per thread
 
     // Chains
 
-    inline bool is_used(size_n_max leaf) const { return next_unused[leaf] != leaf; }
-    inline void mark_used(size_n_max leaf){ next_unused[leaf] = leaf + 1; }
+    inline bool is_used(size_n_max leaf) const { return relaxed_load(next_unused[leaf]) != leaf; }
+    inline void mark_used(size_n_max leaf){ relaxed_store(next_unused[leaf], size_n_max(leaf + 1)); }
     /// The first unused leaf at index >= leaf (N if none), with path halving
     inline size_n_max find_unused(size_n_max leaf){
-        while (next_unused[leaf] != leaf){
-            next_unused[leaf] = next_unused[next_unused[leaf]];
-            leaf = next_unused[leaf];
+        while (true){
+            size_n_max parent = relaxed_load(next_unused[leaf]);
+            if (parent == leaf) return leaf;
+            size_n_max grandparent = relaxed_load(next_unused[parent]);
+            if (grandparent != parent) relaxed_store(next_unused[leaf], grandparent);
+            leaf = parent;
         }
-        return leaf;
     }
     inline kmer_t complement_kmer(size_n_max leaf) const { return ReverseComplement(kMers[leaf], K); }
     /// Index of the reverse complement, self-complementary k-mers are present twice and complement each other
@@ -104,15 +141,16 @@ class LeafOnlyAC {
         return backtrack_positions[rank].second;
     }
     void connect_leaves(size_n_max uncompleted_leaf, size_n_max unused_leaf, const std::vector<size_n_max> &path);
+    bool validate_and_connect(const SearchResult &result);
     void store_backtrack(size_n_max leaf, const std::vector<size_n_max> &path, bool complemented);
     void build_backtrack_lookup();
 
     // Searching
 
     bool try_complete_leaf_phase_1(size_n_max leaf_to_complete);
-    bool search(size_n_max origin, size_k_max budget);
-    void push_failure(size_k_max priority, size_k_max node_depth, size_n_max leaf, size_t log);
-    void restore_unexpanded();
+    bool search(SearchContext &context, size_n_max origin, size_k_max budget);
+    void push_failure(SearchContext &context, size_k_max priority, size_k_max node_depth, size_n_max leaf, size_t log);
+    void restore_unexpanded(SearchContext &context);
     void phase_2(std::vector<size_n_max> &uncompleted_leaves);
     void print_remaining_stats(size_n_max leaves, size_k_max iterations, size_k_max phase, bool printHeader = false);
 
@@ -127,8 +165,9 @@ public:
     }
 
     LeafOnlyAC(const std::vector<kmer_t>& kmers, size_k_max k, bool use_complements, ParetoObjective objective, size_k_max penalty, const ParetoOptions &options) :
-        K(k), N(kmers.size()), COMPLEMENTS(use_complements), OBJECTIVE(objective), PENALTY(penalty), MAX_BUDGET(max_budget(k, objective, penalty)),
-        kMers(kmers), failureIndex(kMers, K) {};
+        K(k), N(kmers.size()), COMPLEMENTS(use_complements), OBJECTIVE(objective), PENALTY(penalty),
+        THREADS(std::max(1, options.threads)), MAX_BUDGET(max_budget(k, objective, penalty)),
+        kMers(kmers), failureIndex(kMers, K, true, THREADS) {};
 
     void compute_result();                  /// Runs the pareto optimization
     size_t print_result(std::ostream& of);  /// Prints the masked superstring, returns its objective value
@@ -141,6 +180,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::compute_result() {
     next_unused.resize(size_t(N) + 1); for (size_t i = 0; i <= size_t(N); ++i) next_unused[i] = size_n_max(i);
     remaining_priorities.resize(N, 0);
     skip_to.resize(N); for (size_n_max i = 0; i < N; ++i) skip_to[i] = i + 1;
+    contexts.resize(THREADS);
 
     /// Phase 1 -- connect leaves overlapping by k - 1 characters
     print_remaining_stats(N, MAX_BUDGET, 1, true);
@@ -178,14 +218,51 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::try_complete_leaf_phase_
 /// Budget 2 only finds overlaps of length k - 1, which phase 1 already found.
 template <typename kmer_t, typename size_n_max, typename priority_t>
 inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::phase_2(std::vector<size_n_max> &uncompleted_leaves) {
+    std::vector<SearchResult> results;
+    std::vector<char> found;
+
     for (size_k_max budget = 3; budget <= MAX_BUDGET; ++budget){
         size_t uncompleted_count = uncompleted_leaves.size();
         print_remaining_stats(uncompleted_count, MAX_BUDGET - budget + 1, 2);
         if (uncompleted_count == 0) break;
 
-        for (size_n_max leaf : uncompleted_leaves){
-            if (next[leaf] != INVALID_NODE) continue;
-            if (search(leaf, budget)) connect_leaves(leaf, context.target, context.path);
+        if (THREADS == 1){
+            SearchContext &context = contexts[0];
+            for (size_n_max leaf : uncompleted_leaves){
+                if (next[leaf] != INVALID_NODE) continue;
+                if (search(context, leaf, budget)) connect_leaves(leaf, context.target, context.path);
+            }
+        } else {
+            /// Larger batches amortize waiting for the slowest search and the commit, smaller ones have fewer conflicts
+            const size_t batch_limit = std::clamp(uncompleted_count / BATCH_FRACTION,
+                size_t(THREADS) * MIN_BATCH_PER_THREAD, size_t(THREADS) * MAX_BATCH_PER_THREAD);
+            if (results.size() < batch_limit){ results.resize(batch_limit); found.resize(batch_limit); }
+
+            for (size_t batch_begin = 0; batch_begin < uncompleted_count; batch_begin += batch_limit){
+                size_t batch_size = std::min(batch_limit, uncompleted_count - batch_begin);
+
+                /// Parallel searches only read the chains (and update the heuristic arrays atomically)
+                #pragma omp parallel for schedule(dynamic, 1) num_threads(THREADS)
+                for (size_t j = 0; j < batch_size; ++j){
+                    size_n_max leaf = uncompleted_leaves[batch_begin + j];
+                    results[j].origin = leaf;
+                    found[j] = false;
+                    if (next[leaf] != INVALID_NODE) continue;
+                    SearchContext &context = contexts[pareto_thread_id()];
+                    if (search(context, leaf, budget)){
+                        found[j] = true;
+                        results[j].target = context.target;
+                        results[j].path = context.path;
+                    }
+                }
+
+                /// Sequential commits in batch order, invalidated results are searched again
+                for (size_t j = 0; j < batch_size; ++j){
+                    if (!found[j] || next[results[j].origin] != INVALID_NODE || validate_and_connect(results[j])) continue;
+                    size_n_max leaf = results[j].origin;
+                    if (search(contexts[0], leaf, budget)) connect_leaves(leaf, contexts[0].target, contexts[0].path);
+                }
+            }
         }
 
         size_t remaining = 0;
@@ -206,11 +283,11 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::print_remaining_stats(si
 
 /// Search for a leaf to connect to the chain ending with origin; finds a connection iff its cost is less than budget
 template <typename kmer_t, typename size_n_max, typename priority_t>
-inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(size_n_max origin, size_k_max budget) {
+inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(SearchContext &context, size_n_max origin, size_k_max budget) {
     context.stack.clear();
     context.log.clear();
     context.log.push_back({origin, 0, 0, true, NO_PARENT});
-    push_failure(budget, K, origin, 0);
+    push_failure(context, budget, K, origin, 0);
 
     kmer_t origin_complement = COMPLEMENTS ? complement_kmer(origin) : kmer_t(0);
     const bool use_skip_to = budget >= PENALTY;
@@ -224,7 +301,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(size_n_max origin
         for (size_n_max i = find_unused(entry.node); i < N && prefix == BitPrefix(kMers[i], K, depth); i = find_unused(i + 1)){
             if (!can_connect(origin, origin_complement, i)) continue;
             context.target = i;
-            restore_unexpanded();
+            restore_unexpanded(context);
             context.path.clear();
             for (size_t log = entry.log; log != 0; log = context.log[log].parent) context.path.push_back(context.log[log].leaf);
             std::reverse(context.path.begin(), context.path.end());
@@ -234,26 +311,30 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(size_n_max origin
         if (priority < 2) continue; /// Every further step costs at least one
 
         size_t log = entry.log;
-        push_failure(priority, depth, context.log[log].leaf, log); /// Failure of the current node
+        push_failure(context, priority, depth, context.log[log].leaf, log); /// Failure of the current node
 
         for (size_n_max i = entry.node; i < N && prefix == BitPrefix(kMers[i], K, depth); ++i){
             if (i == origin) continue;
 
-            priority_t remaining = remaining_priorities[i];
+            priority_t remaining = relaxed_load(remaining_priorities[i]);
             priority_t new_remaining = priority_t(std::min(priority, PRIORITY_SATURATION));
             if (remaining >= priority){
                 if (use_skip_to){ /// Skip the whole run of leaves with high enough priority (with path compression)
                     size_n_max j = i;
-                    while (j < N && remaining_priorities[j] >= priority && prefix == BitPrefix(kMers[j], K, depth)) j = skip_to[j];
-                    for (size_n_max s = i; s < j; ){ size_n_max next_s = skip_to[s]; skip_to[s] = j; s = next_s; }
+                    while (j < N && relaxed_load(remaining_priorities[j]) >= priority && prefix == BitPrefix(kMers[j], K, depth)) j = relaxed_load(skip_to[j]);
+                    /// Pointers only point forward, a concurrent search may redirect the chain past j
+                    for (size_n_max s = i; s < j; ){ size_n_max next_s = relaxed_load(skip_to[s]); relaxed_store(skip_to[s], j); s = next_s; }
                     i = j - 1; /// j itself has to be examined
                 }
                 continue;
             }
-            remaining_priorities[i] = new_remaining;
-            if (use_skip_to && (skip_to[i] >= N || remaining_priorities[skip_to[i]] < priority)) skip_to[i] = i + 1;
+            relaxed_store_max(remaining_priorities[i], new_remaining);
+            if (use_skip_to){
+                size_n_max skip = relaxed_load(skip_to[i]);
+                if (skip >= N || relaxed_load(remaining_priorities[skip]) < priority) relaxed_store(skip_to[i], size_n_max(i + 1));
+            }
             context.log.push_back({i, remaining, new_remaining, false, log});
-            push_failure(priority, K, i, context.log.size() - 1); /// Failure of leaf i
+            push_failure(context, priority, K, i, context.log.size() - 1); /// Failure of leaf i
         }
     }
     return false;
@@ -262,7 +343,8 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(size_n_max origin
 /// Push the failure node of the given node (a suffix of the leaf) if the rise is affordable; the cost is accumulated
 /// level by level, so that no failure is searched for when the rise cannot be afforded
 template <typename kmer_t, typename size_n_max, typename priority_t>
-inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::push_failure(size_k_max priority, size_k_max node_depth, size_n_max leaf, size_t log) {
+inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::push_failure(SearchContext &context,
+        size_k_max priority, size_k_max node_depth, size_n_max leaf, size_t log) {
     auto level_cost = [&](size_k_max failure_depth) -> uint32_t {
         if (OBJECTIVE == ParetoObjective::RUNS)  /// A run is interrupted when the rise gets below depth K - 1
             return 1 + ((node_depth >= K - 1 && failure_depth == K - 2) ? PENALTY : 0);
@@ -282,17 +364,26 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::push_failure(size_k_max 
     context.stack.push_back({failure_index, size_k_max(priority - cost), failure_depth, log});
 }
 
-/// After a successful search, leaves whose subsearch was not finished get their previous remaining priority back,
-/// so that they do not prune later searches
+/// After a successful search, leaves whose subsearch was not finished get their previous remaining priority back
+/// (unless another search raised it meanwhile), so that they do not prune later searches
 template <typename kmer_t, typename size_n_max, typename priority_t>
-inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::restore_unexpanded() {
+inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::restore_unexpanded(SearchContext &context) {
     for (const auto &entry : context.stack){
         for (size_t log = entry.log; log != 0 && !context.log[log].restored; log = context.log[log].parent){
             LogEntry &leaf = context.log[log];
             leaf.restored = true;
-            if (remaining_priorities[leaf.leaf] == leaf.new_priority) remaining_priorities[leaf.leaf] = leaf.old_priority;
+            relaxed_replace(remaining_priorities[leaf.leaf], leaf.new_priority, leaf.old_priority);
         }
     }
+}
+
+template <typename kmer_t, typename size_n_max, typename priority_t>
+inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::validate_and_connect(const SearchResult &result) {
+    size_n_max origin = result.origin, target = result.target;
+    if (next[origin] != INVALID_NODE || is_used(target)) return false;
+    if (!can_connect(origin, COMPLEMENTS ? complement_kmer(origin) : kmer_t(0), target)) return false;
+    connect_leaves(origin, target, result.path);
+    return true;
 }
 
 template <typename kmer_t, typename size_n_max, typename priority_t>
