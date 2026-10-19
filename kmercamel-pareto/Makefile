@@ -1,9 +1,12 @@
 .PHONY: all clean test cpptest converttest verify quick-verify
 
 CXX=         g++
-# OpenMP for pareto optimization threads (disable by OMPFLAGS=)
+# OpenMP for pareto optimization threads (disable by OMPFLAGS=), popcount instruction on x86_64
 OMPFLAGS?=   -fopenmp
-CXXFLAGS=    -g -Wall -Wno-unused-function -std=c++17 -O2 -I/opt/homebrew/include $(OMPFLAGS)
+ifeq ($(shell uname -m),x86_64)
+ARCHFLAGS?=  -mpopcnt
+endif
+CXXFLAGS=    -g -Wall -Wno-unused-function -std=c++17 -O2 -I/opt/homebrew/include $(OMPFLAGS) $(ARCHFLAGS)
 LDFLAGS=     -lz -L/opt/homebrew/lib $(OMPFLAGS)
 LARGEFLAGS=  -DLARGE_KMERS
 ELARGEFLAGS=  -DEXTRA_LARGE_KMERS
