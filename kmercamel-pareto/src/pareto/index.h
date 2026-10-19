@@ -17,11 +17,12 @@ class FailureIndex {
     size_k_max SPEEDUP_DEPTH;
     std::vector<size_n_max> search_speedup;     /// First index of each prefix of length SPEEDUP_DEPTH
 
-    std::vector<size_n_max> first_row;          /// Cached failures at depth K - 1
+    std::vector<size_n_max> first_row;          /// Cached failures at depth K - 1 (empty if not cached)
 
-    inline void construct_index(int threads){
+    inline void construct_index(bool cache_first_row, bool small_table, int threads){
         N = kMers.size();
         SPEEDUP_DEPTH = (N > 1) ? size_k_max(std::log2(double(N)) / 2) : 0;
+        if (small_table && SPEEDUP_DEPTH > 0) --SPEEDUP_DEPTH;
         if (SPEEDUP_DEPTH > K) SPEEDUP_DEPTH = K;
         size_t speedup_size = size_t(1) << (2 * SPEEDUP_DEPTH);
         search_speedup.resize(speedup_size + 1);
@@ -33,7 +34,7 @@ class FailureIndex {
         }
         search_speedup[speedup_size] = N;
 
-        if (K < 2) return;
+        if (!cache_first_row || K < 2) return;
         first_row.resize(N);
         #pragma omp parallel for schedule(static) num_threads(threads) if(threads > 1)
         for (size_t i = 0; i < size_t(N); ++i) first_row[i] = search(kMers[i], K - 1);
@@ -73,9 +74,11 @@ class FailureIndex {
 public:
     static constexpr const size_n_max INVALID_NODE = std::numeric_limits<size_n_max>::max();
 
-    inline FailureIndex(const std::vector<kmer_t> &kmers, size_k_max k, bool print_progress = true, int threads = 1) :
+    /// small_table makes the search table 4 times smaller (low memory mode)
+    inline FailureIndex(const std::vector<kmer_t> &kmers, size_k_max k, bool print_progress = true,
+                        bool cache_first_row = true, bool small_table = false, int threads = 1) :
     kMers(kmers), N(kmers.size()), K(k) {
-        construct_index(threads);
+        construct_index(cache_first_row, small_table, threads);
         if (print_progress) WriteLog("Finished constructing index.");
     }
 

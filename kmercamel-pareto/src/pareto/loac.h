@@ -88,6 +88,7 @@ class LeafOnlyAC {
     const ParetoObjective   OBJECTIVE;
     const size_k_max        PENALTY;
     const int               THREADS;
+    const bool              USE_SKIP_TO;            /// Skip pointers (not in low memory mode)
     const size_k_max        MAX_BUDGET;             /// Every connection not passing through the root costs less
 
     const std::vector<kmer_t>&       kMers;
@@ -166,8 +167,8 @@ public:
 
     LeafOnlyAC(const std::vector<kmer_t>& kmers, size_k_max k, bool use_complements, ParetoObjective objective, size_k_max penalty, const ParetoOptions &options) :
         K(k), N(kmers.size()), COMPLEMENTS(use_complements), OBJECTIVE(objective), PENALTY(penalty),
-        THREADS(std::max(1, options.threads)), MAX_BUDGET(max_budget(k, objective, penalty)),
-        kMers(kmers), failureIndex(kMers, K, true, THREADS) {};
+        THREADS(std::max(1, options.threads)), USE_SKIP_TO(!options.low_memory), MAX_BUDGET(max_budget(k, objective, penalty)),
+        kMers(kmers), failureIndex(kMers, K, true, !options.low_memory, options.low_memory, THREADS) {};
 
     void compute_result();                  /// Runs the pareto optimization
     size_t print_result(std::ostream& of);  /// Prints the masked superstring, returns its objective value
@@ -179,7 +180,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::compute_result() {
     other_end.resize(N); for (size_n_max i = 0; i < N; ++i) other_end[i] = i;
     next_unused.resize(size_t(N) + 1); for (size_t i = 0; i <= size_t(N); ++i) next_unused[i] = size_n_max(i);
     remaining_priorities.resize(N, 0);
-    skip_to.resize(N); for (size_n_max i = 0; i < N; ++i) skip_to[i] = i + 1;
+    if (USE_SKIP_TO){ skip_to.resize(N); for (size_n_max i = 0; i < N; ++i) skip_to[i] = i + 1; }
     contexts.resize(THREADS);
 
     /// Phase 1 -- connect leaves overlapping by k - 1 characters
@@ -290,7 +291,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(SearchContext &co
     push_failure(context, budget, K, origin, 0);
 
     kmer_t origin_complement = COMPLEMENTS ? complement_kmer(origin) : kmer_t(0);
-    const bool use_skip_to = budget >= PENALTY;
+    const bool use_skip_to = USE_SKIP_TO && budget >= PENALTY;
 
     while (!context.stack.empty()){
         SearchEntry entry = context.stack.back(); context.stack.pop_back();

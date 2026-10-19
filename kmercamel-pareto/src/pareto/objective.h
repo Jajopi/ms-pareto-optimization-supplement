@@ -24,4 +24,5 @@ struct ParetoOptions {
     std::string objective;      /// -O: runs or zeros (lowerbound also length or matchtig-count)
     int penalty = 0;            /// -p: penalty per run or per zero, 0 means the default of the objective
     int threads = 1;            /// -t
+    bool low_memory = false;    /// -m: less memory, slower, same result
 };
