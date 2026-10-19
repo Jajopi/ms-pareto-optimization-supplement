@@ -28,3 +28,10 @@ Pareto optimization was implemented in fork of KmerCamel🐫, see [original READ
    this phase is usually not reached.
 
 Building: `make` (`make OMPFLAGS=` disables OpenMP and thus `-t`; on x86_64 the `popcnt` instruction is used, override with `ARCHFLAGS=`).
+
+## Tests
+
+`make pareto-test` checks on small inputs (generated from `data/spneumoniae.fa`) that the results represent the k-mer sets
+in all modes, that the reported objective is correct, that `-m` does not change the result, large penalties,
+input formats and rejection of invalid options. `make pareto-test-sanitize` runs the same with AddressSanitizer
+and UndefinedBehaviorSanitizer. Setting `REF_BIN=<binary>` also checks that the results are identical to another build.

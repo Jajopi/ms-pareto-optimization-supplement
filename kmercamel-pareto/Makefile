@@ -1,4 +1,4 @@
-.PHONY: all clean test cpptest converttest verify quick-verify
+.PHONY: all clean test cpptest converttest verify quick-verify pareto-test pareto-test-sanitize
 
 CXX=         g++
 # OpenMP for pareto optimization threads (disable by OMPFLAGS=), popcount instruction on x86_64
@@ -32,6 +32,15 @@ verify: verify.py kmercamel
 	./verify.py --simplitigs --k 31 $(DATA)/simplitigs-k31.fa
 	./verify.py $(DATA)/spneumoniae.fa
 
+pareto-test: kmercamel
+	bash $(TESTS)/pareto/run_tests.sh
+
+pareto-test-sanitize: kmercamel-sanitize
+	BIN=./kmercamel-sanitize bash $(TESTS)/pareto/run_tests.sh
+
+kmercamel-sanitize: $(SRC)/main.cpp $(HEADERS) src/version.h
+	$(CXX) $(CXXFLAGS) -O1 -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined $(SRC)/main.cpp -o $@ $(LDFLAGS)
+
 quick-verify: verify.py kmercamel
 	./verify.py --simplitigs --k 31 $(DATA)/simplitigs-k31.fa
 	./verify.py --quick $(DATA)/spneumoniae.fa
@@ -63,7 +72,7 @@ src/version.h: src/version
 
 
 clean:
-	rm -f kmercamel
+	rm -f kmercamel kmercamel-sanitize
 	rm -f 🐫 || true
 	rm -f kmercameltest
 	rm -f kmercameltest-large
