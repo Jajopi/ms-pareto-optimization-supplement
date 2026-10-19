@@ -355,10 +355,6 @@ size_t LowerBoundMatchtigCount(std::vector<kmer_t>&& kMerVec, size_k_max k, bool
         /// Sort kmers
         std::sort(kMerVec.begin(), kMerVec.end());
 
-        /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
-        /// Skipping this step as input data are nice
-        // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
-
         size_t limit = kMerVec.size();
         if      (limit <= (size_t(1) << 15))
             return compute_matchtig_count_lower_bound<kmer_t, uint16_t>(kMerVec, k, complements);
@@ -411,10 +407,6 @@ size_t LowerBoundPareto(std::vector<kmer_t>&& kMerVec, const int k, bool complem
 
         /// Sort kmers
         std::sort(kMerVec.begin(), kMerVec.end());
-
-        /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
-        /// Skipping this step as input data are nice
-        // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
 
         if (penalty == 0){
             if (objective == ParetoObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;

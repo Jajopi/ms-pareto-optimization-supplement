@@ -1,9 +1,7 @@
-#include <algorithm>
 #include <iostream>
 #include <string>
-#include <unistd.h>
 
-#include "kmers.h"
+#include "unistd.h"
 #include "version.h"
 #include "ac/global_ac.h"
 #include "global.h"
@@ -16,6 +14,10 @@
 #include "khash_utils.h"
 #include "conversions.h"
 
+#include <iostream>
+#include <string>
+#include "unistd.h"
+#include "version.h"
 #include "masks.h"
 #include "lower_bound.h"
 #include "pareto.h"
@@ -59,11 +61,11 @@ int usage_subcommand(std::string subcommand) {
 
     if (subcommand != "lowerbound" && subcommand != "ms2mssep")
     std::cerr << "  -o FILE  - output for the (minone) masked superstring; if not specified, printed to stdout" << std::endl;
-
+    
     if (subcommand == "compute")
     std::cerr << "  -M FILE  - if given, print also ms with mask maximizing ones (only with global)" << std::endl;
 
-
+    
     if (subcommand == "compute")
     std::cerr << "  -S       - optimize for the input being correctly computed simplitigs (only with global)" << std::endl;
 
@@ -82,12 +84,11 @@ int usage_subcommand(std::string subcommand) {
     std::cerr << "  -s FILE  - output file with superstring" << std::endl;
     }
 
-    if (subcommand == "compute"){
-    std::cerr << "  -O STR   - objective for pareto optimization, either 'runs' or zeros'" << std::endl;
-    } else if (subcommand == "lowerbound"){
+    if (subcommand == "compute") {
+    std::cerr << "  -O STR   - objective for pareto optimization, either 'runs' or 'zeros'" << std::endl;
+    std::cerr << "  -p INT   - pareto: penalty per run or per zero; default 7 for runs, 2 for zeros" << std::endl;
+    } else if (subcommand == "lowerbound")
     std::cerr << "  -O STR   - objective, either 'runs' or 'zeros' for pareto optimization, or 'matchtig-count'" << std::endl;
-    }
-
     std::cerr << "  -h       - print help" << std::endl;
     std::cerr << std::endl;
     return 1;
@@ -104,15 +105,12 @@ void Version() {
 /// Run KmerCamel with the given parameters.
 template <typename kmer_t, typename kh_wrapper_t>
 int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, int d_max, std::ostream *of, std::ostream *maskf, bool complements, bool masks,
-                    std::string algorithm, bool lower_bound, bool assume_simplitigs, std::string objective, int penalty = 0) {
+                    std::string algorithm, bool lower_bound, bool assume_simplitigs, ParetoOptions pareto = ParetoOptions()) {
     if (algorithm == "sorted-integers") {
         auto *kMers = wrapper.kh_init_set();
         ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
         std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
         wrapper.kh_destroy_set(kMers);
-
-        for (size_t i = 0; i < kMerVec.size(); ++i) kMerVec[i] = complements ? std::min(kMerVec[i], ReverseComplement(kMerVec[i], k)) : kMerVec[i];
-
         std::sort(kMerVec.begin(), kMerVec.end());
         PrintKmersAsIntegers(of, kMerVec, k);
         return 0;
@@ -125,7 +123,7 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         return ret;
     }
 
-    if (lower_bound && objective == "matchtig-count"){
+    if (lower_bound && pareto.objective == "matchtig-count"){
         auto *kMers = wrapper.kh_init_set();
         ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
         std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
@@ -143,12 +141,29 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         Streaming(wrapper, kmer_type, path, *of,  k , complements);
         WriteLog("Finished masked superstring computation.");
     }
+    /* Pareto optimization works on a vector of k-mers. */
+    else if (algorithm == ALG_PARETO) {
+        auto *kMers = wrapper.kh_init_set();
+        ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
+        std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
+        wrapper.kh_destroy_set(kMers);
+        if (kMerVec.empty()) {
+            std::cerr << "Path '" << path << "' contains no k-mers. Make sure that your file is a FASTA or gzipped FASTA." << std::endl;
+            return usage_subcommand(lower_bound ? "lowerbound" : "compute");
+        }
+        WriteLog("Finished collecting k-mers: " + std::to_string(kMerVec.size()) + " " + std::to_string(k) + "-mers.");
+        if (lower_bound) *of << LowerBoundPareto(std::move(kMerVec), k, complements, pareto.objective, pareto.penalty);
+        else {
+            WriteName(path, algorithm, k, false, !complements, *of);
+            if (!ParetoOptimization(std::move(kMerVec), *of, k, complements, pareto)) return 1;
+        }
+    }
     /* Handle hash table based algorithms separately so that they consume less memory. */
-    else if (algorithm == "global" || algorithm == "local" || algorithm == ALG_PARETO) {
+    else if (algorithm == "global" || algorithm == "local") {
 
         auto *kMers = wrapper.kh_init_set();
         size_t kmer_count = 0;
-        if (!assume_simplitigs || algorithm == ALG_PARETO) {
+        if (!assume_simplitigs) {
             ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
 
             if (!kh_size(kMers)) {
@@ -158,7 +173,7 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             kmer_count = kh_size(kMers);
             WriteLog("Finished collecting k-mers: " + std::to_string(kmer_count) + " " + std::to_string(k) + "-mers.");
         }
-
+        
         d_max = std::min(k - 1, d_max);
         if (!lower_bound) WriteName(path, algorithm, k, false, !complements, *of);
         if (maskf != nullptr) WriteName(path, algorithm, k, true, !complements, *maskf);
@@ -178,14 +193,6 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
             }
             else if (lower_bound) *of << LowerBoundLength(wrapper, kmer_type, simplitigs, k, complements);
             else Global(wrapper, kmer_type, simplitigs, *of, maskf, k, complements);
-        } else if (algorithm == ALG_PARETO){ /// TODO use simplitigs?
-            std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
-            wrapper.kh_destroy_set(kMers);
-            if (lower_bound){
-                *of << LowerBoundPareto(std::move(kMerVec), k, complements, objective, penalty);
-            } else {
-                ParetoOptimization(std::move(kMerVec), *of, k, complements, objective, penalty);
-            }
         } else {
             Local(kMers, wrapper, kmer_type, *of, k, d_max, complements);
             WriteLog("Finished masked superstring computation.");
@@ -233,9 +240,9 @@ int camel_compute(int argc, char **argv) {
     bool complements = true;
     bool d_set = false;
     bool assume_simplitigs = false;
+    ParetoOptions pareto;
+    bool pareto_option_set = false;
     int opt;
-    std::string objective = ""; /// Possible: runs, zeros
-    int penalty = 0;
     try {
         while ((opt = getopt(argc, argv, "k:d:a:o:huxM:SO:p:"))  != -1) {
             switch(opt) {
@@ -267,10 +274,11 @@ int camel_compute(int argc, char **argv) {
                     assume_simplitigs = true;
                     break;
                 case 'O':
-                    objective = optarg;
+                    pareto.objective = optarg;
                     break;
                 case 'p':
-                    penalty = std::stoi(optarg);
+                    pareto.penalty = std::stoi(optarg);
+                    pareto_option_set = true;
                     break;
                 case 'h':
                     usage_subcommand(subcommand);
@@ -307,19 +315,22 @@ int camel_compute(int argc, char **argv) {
     } else if (assume_simplitigs && algorithm != "global") {
         std::cerr << "Optimization for the input being simplitigs is possible only with global." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm != ALG_PARETO && objective.length() != 0){
-        std::cerr << "Option -O (objective) is only valid with 'pareto' optimization algorithm." << std::endl;
+    } else if (algorithm != ALG_PARETO && (pareto_option_set || !pareto.objective.empty())) {
+        std::cerr << "Options -O and -p are only valid with the 'pareto' algorithm." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (algorithm == ALG_PARETO && !(objective == "runs" || objective == "zeros")){
+    } else if (algorithm == ALG_PARETO && pareto.objective != "runs" && pareto.objective != "zeros") {
         std::cerr << "Pareto optimization needs an objective: either -O runs or -O zeros." << std::endl;
+        return usage_subcommand(subcommand);
+    } else if (algorithm == ALG_PARETO && (pareto.penalty < 0 || pareto.penalty > 65535)) {
+        std::cerr << "Penalty (-p) has to be between 0 (default) and 65535." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, pareto);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, pareto);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, objective, penalty);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, d_max, of, maskf, complements, false, algorithm, false, assume_simplitigs, pareto);
     }
 }
 
@@ -377,11 +388,11 @@ int camel_optimize(int argc, char **argv) {
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false, "");
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, true, algorithm, false, false);
     }
 }
 
@@ -395,14 +406,21 @@ int camel_lowerbound(int argc, char **argv) {
     int k = 0;
     std::ostream *of = &std::cout;
     bool complements = true;
-    int opt;
     std::string algorithm = "global";
-    std::string objective = "length"; /// Possible: length, matchtig-count, runs, zeros
+    ParetoOptions pareto;
+    pareto.objective = "length"; /// Possible: length, matchtig-count (global), runs, zeros (pareto)
+    int opt;
     try {
         while ((opt = getopt(argc, argv, "k:a:huxO:"))  != -1) {
             switch(opt) {
-                case 'k':
+                case  'k':
                     k = std::stoi(optarg);
+                    break;
+                case  'a':
+                    algorithm = optarg;
+                    break;
+                case 'O':
+                    pareto.objective = optarg;
                     break;
                 case 'u':
                     complements = false;
@@ -410,14 +428,8 @@ int camel_lowerbound(int argc, char **argv) {
                 case 'h':
                     usage_subcommand(subcommand);
                     return 0;
-                case  'a':
-                    algorithm = optarg;
-                    break;
                 case 'x':
                     std::cerr << "Warning: The parameter -x currently has no effect due to the improvement in the underlying algorithm." <<std::endl;
-                    break;
-                case 'O':
-                    objective = optarg;
                     break;
                 default:
                     return usage_subcommand(subcommand);
@@ -436,27 +448,22 @@ int camel_lowerbound(int argc, char **argv) {
     } else if (k < 0) {
         std::cerr << "k must be positive." << std::endl;
         return usage_subcommand(subcommand);
-    } else if (objective.length() != 0){
-        if (algorithm != "global" && algorithm != ALG_PARETO){
-            std::cerr << "Only valid options for algorithm are 'global' (default) of 'pareto." << std::endl;
-            return usage_subcommand(subcommand);
-        } else if (algorithm == ALG_PARETO && objective != "runs" && objective != "zeros"){
-            std::cerr << "For pareto optimization lowerbound, only valid objectives are 'runs' or 'zeros'." << std::endl;
-            return usage_subcommand(subcommand);
-        } else if (algorithm == "global" && objective != "length" && objective != "matchtig-count"){
-            std::cerr << "For global algorithm lowerbound, only valid objectives are 'length' (default) or 'matchtig-count'." << std::endl;
-            return usage_subcommand(subcommand);
-        }
-    } else if (algorithm == ALG_PARETO && objective != "runs" && objective != "zeros"){
+    } else if (algorithm != "global" && algorithm != ALG_PARETO) {
+        std::cerr << "Only valid algorithms are 'global' (default) or 'pareto'." << std::endl;
+        return usage_subcommand(subcommand);
+    } else if (algorithm == "global" && pareto.objective != "length" && pareto.objective != "matchtig-count") {
+        std::cerr << "For global algorithm lowerbound, only valid objectives are 'length' (default) or 'matchtig-count'." << std::endl;
+        return usage_subcommand(subcommand);
+    } else if (algorithm == ALG_PARETO && pareto.objective != "runs" && pareto.objective != "zeros") {
         std::cerr << "Pareto optimization lowerbound needs an objective: either 'runs' or 'zeros'." << std::endl;
         return usage_subcommand(subcommand);
     }
     if (k < 32) {
-        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
+        return kmercamel(kmer_dict64_t(), kmer64_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, pareto);
     } else if (k < 64) {
-        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
+        return kmercamel(kmer_dict128_t(), kmer128_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, pareto);
     } else {
-        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, objective);
+        return kmercamel(kmer_dict256_t(), kmer256_t(0), path, k, 0, of, nullptr, complements, false, algorithm, true, false, pareto);
     }
 }
 
@@ -475,7 +482,7 @@ int camel_split_ms(int argc, char **argv) {
     bool superstring_set = false;
     std::ofstream superstring;
     std::ostream *superstringf = &std::cout;
-
+    
     int opt;
     try {
         while ((opt = getopt(argc, argv, "m:s:h"))  != -1) {
@@ -518,7 +525,7 @@ int camel_split_ms(int argc, char **argv) {
     WriteLog("Started splitting masked superstring '" + path + "'.");
     split_ms(*superstringf, *maskf, path);
     WriteLog("Finished masked superstring splitting.");
-    return 0;
+    return 0;    
 }
 
 int camel_join_ms(int argc, char **argv) {
@@ -534,8 +541,8 @@ int camel_join_ms(int argc, char **argv) {
 
     std::ofstream output;
     std::ostream *of = &std::cout;
-
-
+    
+    
     int opt;
     try {
         while ((opt = getopt(argc, argv, "m:s:o:h"))  != -1) {
@@ -579,7 +586,7 @@ int camel_join_ms(int argc, char **argv) {
     WriteLog("Started masked superstring joining.");
     join_ms(*superstringf, *maskf, *of);
     WriteLog("Finished masked superstring joining.");
-    return 0;
+    return 0;    
 }
 
 int camel_ms_to_spss(int argc, char **argv) {
@@ -594,7 +601,7 @@ int camel_ms_to_spss(int argc, char **argv) {
     std::ostream *of = &std::cout;
 
     int k = 0;
-
+    
     int opt;
     try {
         while ((opt = getopt(argc, argv, "o:k:h"))  != -1) {
@@ -645,7 +652,7 @@ int camel_spss_to_ms(int argc, char **argv) {
     std::ostream *of = &std::cout;
 
     int k = 0;
-
+    
     int opt;
     try {
         while ((opt = getopt(argc, argv, "o:k:h"))  != -1) {
@@ -704,6 +711,6 @@ int main(int argc, char **argv) {
         return camel_spss_to_ms(argc - 1, argv + 1);
     } else {
         std::cerr << "Command '" << argv[1] << "' not recognized." << std::endl;
-        return usage();
+        return usage(); 
     }
 }

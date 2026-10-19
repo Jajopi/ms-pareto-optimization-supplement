@@ -2,80 +2,50 @@
 
 #include <vector>
 #include <algorithm>
+#include <limits>
 
 #include "kmers.h"
 #include "parser.h"
 #include "pareto/objective.h"
 #include "pareto/loac.h"
 
-/// The pareto optimization process
+/// Run the optimization with the given type of leaf indexes, return the objective value
 template <typename kmer_t, typename size_n_max>
-void compute_pareto_optimization(std::vector<kmer_t>& kMers, std::ostream& of, size_k_max k, bool complements, ParetoObjective objective, size_k_max penalty){
-    auto loac = LeafOnlyAC<kmer_t, size_n_max>(kMers, size_n_max(k), complements, objective, penalty);
+size_t RunParetoOptimization(const std::vector<kmer_t>& kMers, std::ostream& of, size_k_max k, bool complements,
+                             ParetoObjective objective, size_k_max penalty){
+    LeafOnlyAC<kmer_t, size_n_max> loac(kMers, size_n_max(k), complements, objective, penalty);
     loac.compute_result();
-    loac.optimize_result(); // TODO add parameters
-    size_t total_objective_value = loac.print_result(of);
-
-    WriteLog("Finished pareto optimization of masked superstring, resulting objective value: " + std::to_string(total_objective_value) + ".");
-}
-
-/// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
-/// Not used at the moment
-template <typename kmer_t>
-size_t RemoveDuplicateKmers(std::vector<kmer_t>& sorted_kMerVec, bool even_k){
-    size_t size_limit = sorted_kMerVec.size() - (even_k ? 2 : 1);
-    size_t removed = 0;
-    for (size_t i = 0; i < size_limit; ++i){
-        if (sorted_kMerVec[i] == sorted_kMerVec[i + 1 + even_k]) ++removed;
-        if (removed != 0) sorted_kMerVec[i] = sorted_kMerVec[i + removed];
-    }
-    sorted_kMerVec.resize(sorted_kMerVec.size() - removed);
-    return removed;
+    return loac.print_result(of);
 }
 
 /// Get the masked superstring of the given k-mers using the pareto optimization heuristic.
-/// The objective is in the form |S| + c * X, where X is either:
-/// - number of runs of ones in the mask    (ParetoObjective.RUNS)
-/// - number of zeroes if the mask          (ParetoObjective.ZEROS)
-///
-/// This runs in O(n^2 k^2), where n is the number of k-mers.
-/// If complements are provided, treat k-mer and its complement as identical.
-/// If this is the case, k-mers are expected not to contain both k-mer and its complement.
+/// The objective is |S| + penalty * X, where X is the number of runs of ones (runs) or of zeros (zeros) in the mask.
+/// The k-mers have to be distinct (canonical if complements are used). Returns false if the computation failed.
 template <typename kmer_t>
-void ParetoOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, std::string objective_string, size_k_max penalty){
+bool ParetoOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_max k, bool complements, ParetoOptions options){
     try {
-        if (kMerVec.empty()) {
-            throw std::invalid_argument("Empty input provided");
-        }
-
-        /// Parse the objective
-        ParetoObjective objective = GetParetoObjective(objective_string);
-        /// Get penalty
+        if (kMerVec.empty()) throw std::invalid_argument("Empty input provided");
+        ParetoObjective objective = GetParetoObjective(options.objective);
+        if (options.penalty < 0 || options.penalty > std::numeric_limits<size_k_max>::max())
+            throw std::invalid_argument("Penalty has to be between 0 and " + std::to_string(std::numeric_limits<size_k_max>::max()));
+        size_k_max penalty = size_k_max(options.penalty);
         if (penalty == 0){
-            if (objective == ParetoObjective::RUNS)  penalty = DEFAULT_PENALTY_RUNS;
-            if (objective == ParetoObjective::ZEROS) penalty = DEFAULT_PENALTY_ZEROS;
+            penalty = (objective == ParetoObjective::RUNS) ? DEFAULT_PENALTY_RUNS : DEFAULT_PENALTY_ZEROS;
             WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
         }
 
-        /// Add complements
         if (complements) AddComplements(kMerVec, k);
-
-        /// Sort kmers
         std::sort(kMerVec.begin(), kMerVec.end());
 
-        /// Remove k-mers present more times than they should be (2 for self complements, 1 otherwise)
-        /// Skipping this step as input data are nice
-        // RemoveDuplicateKmers(kMerVec, k % 2 == 0);
-
-        size_t limit = kMerVec.size();
-        if      (limit <= (size_t(1) << 15))
-            compute_pareto_optimization<kmer_t, uint16_t>(kMerVec, of, k, complements, objective, penalty);
-        else if (limit <= (size_t(1) << 31))
-            compute_pareto_optimization<kmer_t, uint32_t>(kMerVec, of, k, complements, objective, penalty);
-        else
-            compute_pareto_optimization<kmer_t, uint64_t>(kMerVec, of, k, complements, objective, penalty);
+        size_t n = kMerVec.size(), value;
+        if (n <= (size_t(1) << 15))      value = RunParetoOptimization<kmer_t, uint16_t>(kMerVec, of, k, complements, objective, penalty);
+        else if (n <= (size_t(1) << 31)) value = RunParetoOptimization<kmer_t, uint32_t>(kMerVec, of, k, complements, objective, penalty);
+        else                             value = RunParetoOptimization<kmer_t, uint64_t>(kMerVec, of, k, complements, objective, penalty);
+        WriteLog("Finished pareto optimization of masked superstring, resulting objective value: " + std::to_string(value) + ".");
     }
     catch (const std::exception& e){
         WriteLog("Exception was thrown: " + std::string(e.what()) + ".");
+        return false;
     }
+    return true;
 }

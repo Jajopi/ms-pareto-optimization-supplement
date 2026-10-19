@@ -56,7 +56,6 @@ public:
         K(k), N(kmers.size()), COMPLEMENTS(use_complements), OBJECTIVE(objective), PENALTY(penalty), kMers(kmers), failureIndex(kMers, K) { construct_complements(); };
 
     void compute_result();                      /// Runs pareto optimization
-    void optimize_result();                     /// Runs some other reoptimization -- currently none, possible TODO to implement
     size_t print_result(std::ostream& of);      /// Prints the masked superstring to output stream, return the value of objective function for printed result
 };
 
@@ -151,16 +150,6 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::compute_result() {
 
     RESULT_COMPUTED = true;
     std::cerr << std::endl; WriteLog("Finished computation of a masked superstring.");
-}
-
-template <typename kmer_t, typename size_n_max>
-inline void LeafOnlyAC<kmer_t, size_n_max>::optimize_result() {
-    if (!RESULT_COMPUTED){
-        throw std::invalid_argument("Result has not been computed yet.");
-    }
-    // WriteLog("Starting secondary optimization of the masked superstring.");
-    WriteLog("No secondary optimization implemented yet.");
-    // WriteLog("Finished secondary optimization of the masked superstring.");
 }
 
 template <typename kmer_t, typename size_n_max>
