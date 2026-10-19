@@ -7,6 +7,7 @@ LARGEFLAGS=  -DLARGE_KMERS
 ELARGEFLAGS=  -DEXTRA_LARGE_KMERS
 SRC=         src
 TESTS=       tests
+HEADERS=     $(wildcard $(SRC)/*.h $(SRC)/*/*.h $(SRC)/*.hpp)
 GTEST=       $(TESTS)/googletest/googletest
 DATA=        data
 
@@ -35,18 +36,18 @@ cpptest: kmercameltest kmercameltest-large kmercameltest-extra-large
 	./kmercameltest-large
 	./kmercameltest-extra-large
 
-kmercamel: $(SRC)/main.cpp $(SRC)/$(wildcard *.cpp *.h *.hpp) src/version.h
+kmercamel: $(SRC)/main.cpp $(HEADERS) src/version.h
 	./create-version.sh
 	$(CXX) $(CXXFLAGS) $(SRC)/main.cpp -o $@ $(LDFLAGS)
 	cp kmercamel  🐫 || true
 
-kmercameltest: $(TESTS)/unittest.cpp gtest-all.o $(SRC)/$(wildcard *.cpp *.h *.hpp) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
+kmercameltest: $(TESTS)/unittest.cpp gtest-all.o $(HEADERS) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
 	$(CXX) $(CXXFLAGS) -isystem $(GTEST)/include -I $(GTEST)/include $(TESTS)/unittest.cpp gtest-all.o -pthread -o $@ $(LDFLAGS)
 
-kmercameltest-large: $(TESTS)/unittest.cpp gtest-all.o $(SRC)/$(wildcard *.cpp *.h *.hpp) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
+kmercameltest-large: $(TESTS)/unittest.cpp gtest-all.o $(HEADERS) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
 	$(CXX) $(CXXFLAGS) -isystem $(GTEST)/include -I $(GTEST)/include $(TESTS)/unittest.cpp gtest-all.o -pthread -o $@ $(LDFLAGS) $(LARGEFLAGS)
 
-kmercameltest-extra-large: $(TESTS)/unittest.cpp gtest-all.o $(SRC)/$(wildcard *.cpp *.h *.hpp) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
+kmercameltest-extra-large: $(TESTS)/unittest.cpp gtest-all.o $(HEADERS) $(TESTS)/$(wildcard *.cpp *.h *.hpp)
 	$(CXX) $(CXXFLAGS) -isystem $(GTEST)/include -I $(GTEST)/include $(TESTS)/unittest.cpp gtest-all.o -pthread -o $@ $(LDFLAGS) $(ELARGEFLAGS)
 
 gtest-all.o: $(GTEST)/src/gtest-all.cc $(wildcard *.cpp *.h *.hpp)
