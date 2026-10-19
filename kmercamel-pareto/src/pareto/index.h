@@ -39,7 +39,7 @@ class FailureIndex {
 
         if (depth < SPEEDUP_DEPTH){
             size_n_max begin = search_speedup[searched << 2 * (SPEEDUP_DEPTH - depth)];
-            return (BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
+            return (begin < N && BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
         }
         
         kmer_t speedup_index = BitPrefix(searched, depth, SPEEDUP_DEPTH);
@@ -55,7 +55,7 @@ class FailureIndex {
                 if (current < searched) begin = middle + 1;
                 else end = middle;
             }
-            return (BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
+            return (begin < N && BitPrefix(kMers[begin], K, depth) == searched) ? begin : INVALID_NODE;
         }
         
         for (size_n_max i = begin; i < end; ++i){

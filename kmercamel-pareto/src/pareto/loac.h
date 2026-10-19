@@ -57,7 +57,7 @@ public:
 
     void compute_result();                      /// Runs pareto optimization
     void optimize_result();                     /// Runs some other reoptimization -- currently none, possible TODO to implement
-    size_n_max print_result(std::ostream& of);  /// Prints the masked superstring to output stream, return the value of objective function for printed result
+    size_t print_result(std::ostream& of);      /// Prints the masked superstring to output stream, return the value of objective function for printed result
 };
 
 // Constructing
@@ -244,7 +244,7 @@ inline bool LeafOnlyAC<kmer_t, size_n_max>::try_complete_leaf_phase_2(size_n_max
                     continue;
                 }
                 remaining_priorities[i] = priority;
-                if (remaining_priorities[skip_to[i]] < priority) skip_to[i] = i + 1;
+                if (skip_to[i] >= N || remaining_priorities[skip_to[i]] < priority) skip_to[i] = i + 1;
             } else {
                 if (remaining_priorities[i] >= priority) continue;
                 remaining_priorities[i] = priority;
@@ -342,12 +342,12 @@ inline void LeafOnlyAC<kmer_t, size_n_max>::set_backtrack_path_for_leaf(size_n_m
 }
 
 template <typename kmer_t, typename size_n_max>
-inline size_n_max LeafOnlyAC<kmer_t, size_n_max>::print_result(std::ostream& of) {
+inline size_t LeafOnlyAC<kmer_t, size_n_max>::print_result(std::ostream& of) {
     if (!RESULT_COMPUTED){
         throw std::invalid_argument("Result has not been computed yet.");
     }
 
-    size_n_max total_objective_value = 0;
+    size_t total_objective_value = 0;
 
     size_n_max actual = INVALID_NODE;
     kmer_t last_kmer = 0;
