@@ -141,12 +141,9 @@ int kmercamel(kh_wrapper_t wrapper, kmer_t kmer_type, std::string path, int k, i
         Streaming(wrapper, kmer_type, path, *of,  k , complements);
         WriteLog("Finished masked superstring computation.");
     }
-    /* Pareto optimization works on a vector of k-mers. */
+    /* Pareto optimization reads k-mers directly into a sorted vector. */
     else if (algorithm == ALG_PARETO) {
-        auto *kMers = wrapper.kh_init_set();
-        ReadKMers(kMers, wrapper, kmer_type, path, k, complements);
-        std::vector<kmer_t> kMerVec = kMersToVec(kMers, kmer_type);
-        wrapper.kh_destroy_set(kMers);
+        std::vector<kmer_t> kMerVec = ReadKMersSorted<kmer_t>(path, k, complements);
         if (kMerVec.empty()) {
             std::cerr << "Path '" << path << "' contains no k-mers. Make sure that your file is a FASTA or gzipped FASTA." << std::endl;
             return usage_subcommand(lower_bound ? "lowerbound" : "compute");

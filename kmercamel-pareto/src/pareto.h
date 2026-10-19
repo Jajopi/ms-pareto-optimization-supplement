@@ -7,6 +7,7 @@
 #include "kmers.h"
 #include "parser.h"
 #include "pareto/objective.h"
+#include "pareto/input.h"
 #include "pareto/loac.h"
 
 /// Run the optimization with the given types of leaf indexes and stored remaining priorities, return the objective value
@@ -43,8 +44,9 @@ bool ParetoOptimization(std::vector<kmer_t>&& kMerVec, std::ostream& of, size_k_
             WriteLog("Using default penalty: " + std::to_string(penalty) + ".");
         }
 
-        if (complements) AddComplements(kMerVec, k);
-        std::sort(kMerVec.begin(), kMerVec.end());
+        if (complements) AddComplementsSorted(kMerVec, k);
+        else if (!std::is_sorted(kMerVec.begin(), kMerVec.end())) ParallelSort<kmer_t>(kMerVec.begin(), kMerVec.end(), 2 * k);
+        WriteLog("Finished sorting k-mers.");
 
         size_t n = kMerVec.size(), value;
         if (n <= (size_t(1) << 15))      value = RunParetoOptimization<kmer_t, uint16_t>(kMerVec, of, k, complements, objective, penalty, options);
