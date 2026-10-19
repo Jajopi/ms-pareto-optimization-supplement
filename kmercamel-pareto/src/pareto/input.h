@@ -8,10 +8,32 @@
 #include "../parser.h"
 #include "objective.h"
 
-/// Sort k-mers with key_bits significant bits
+/// Sort k-mers with key_bits significant bits: in-place radix presort by the top bits (American flag sort),
+/// then each bucket is sorted separately (in cache, in parallel); larger arrays get more buckets
 template <typename kmer_t>
 void ParallelSort(typename std::vector<kmer_t>::iterator begin, typename std::vector<kmer_t>::iterator end, int threads, int key_bits){
-    std::sort(begin, end);
+    size_t n = end - begin;
+    if (n < (size_t(1) << 16)){ std::sort(begin, end); return; }
+    int bits = 0;
+    while (bits < 16 && (n >> bits) > (size_t(1) << 18)) ++bits;
+    bits = std::min(std::max(8, bits), key_bits);
+    const int shift = key_bits - bits;
+    const size_t buckets = size_t(1) << bits;
+    auto bucket_of = [&](const kmer_t &x) -> size_t { return size_t(uint64_t(x >> shift)); };
+
+    std::vector<size_t> start(buckets + 1, 0), fill(buckets);
+    for (auto it = begin; it != end; ++it) ++start[bucket_of(*it) + 1];
+    for (size_t b = 0; b < buckets; ++b) start[b + 1] += start[b];
+    for (size_t b = 0; b < buckets; ++b) fill[b] = start[b];
+    for (size_t b = 0; b < buckets; ++b){ /// Cycle leader permutation, every element moves directly into its bucket
+        while (fill[b] < start[b + 1]){
+            kmer_t value = begin[fill[b]];
+            for (size_t target = bucket_of(value); target != b; target = bucket_of(value)) std::swap(value, begin[fill[target]++]);
+            begin[fill[b]++] = value;
+        }
+    }
+    #pragma omp parallel for schedule(dynamic, 16) num_threads(threads) if(threads > 1)
+    for (size_t b = 0; b < buckets; ++b) std::sort(begin + start[b], begin + start[b + 1]);
 }
 
 /// Merge sorted runs [0, middle) and [middle, size) of the vector (backward, only the second run is copied)
