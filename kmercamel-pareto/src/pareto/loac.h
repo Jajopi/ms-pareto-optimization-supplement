@@ -72,6 +72,8 @@ class LeafOnlyAC {
     struct SearchContext {
         std::vector<SearchEntry> stack;
         std::vector<LogEntry> log;
+        std::vector<std::pair<size_n_max, priority_t>> hops; /// Skip pointer jumps of a run (start, minimum over the hop)
+        std::vector<size_n_max> pointer_writes;              /// Skip pointers written by this search
 
         size_n_max target;                                   /// Result: leaf to connect to
         std::vector<size_n_max> path;                        /// and reused leaves on the way
@@ -99,6 +101,7 @@ class LeafOnlyAC {
     std::vector<size_n_max> next_unused;            /// next_unused[i] == i iff leaf i is unused (= starts a chain)
     std::vector<priority_t> remaining_priorities;   /// Maximal remaining budget a leaf was expanded with
     std::vector<size_n_max> skip_to;                /// Skip pointers over leaves with high remaining priorities
+    std::vector<priority_t> skip_min;               /// Leaves in [s, skip_to[s]) have remaining priority >= skip_min[s]
 
     std::vector<size_n_max> backtracks;             /// Blocks [count, leaf_1, ..., leaf_count] of reused leaves
     std::vector<std::pair<size_n_max, size_t>> backtrack_positions; /// (leaf, position of its block)
@@ -180,7 +183,7 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::compute_result() {
     other_end.resize(N); for (size_n_max i = 0; i < N; ++i) other_end[i] = i;
     next_unused.resize(size_t(N) + 1); for (size_t i = 0; i <= size_t(N); ++i) next_unused[i] = size_n_max(i);
     remaining_priorities.resize(N, 0);
-    if (USE_SKIP_TO){ skip_to.resize(N); for (size_n_max i = 0; i < N; ++i) skip_to[i] = i + 1; }
+    if (USE_SKIP_TO){ skip_to.resize(N); for (size_n_max i = 0; i < N; ++i) skip_to[i] = i + 1; skip_min.resize(N, 0); }
     contexts.resize(THREADS);
 
     /// Phase 1 -- connect leaves overlapping by k - 1 characters
@@ -287,11 +290,12 @@ template <typename kmer_t, typename size_n_max, typename priority_t>
 inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(SearchContext &context, size_n_max origin, size_k_max budget) {
     context.stack.clear();
     context.log.clear();
+    context.pointer_writes.clear();
     context.log.push_back({origin, 0, 0, true, NO_PARENT});
     push_failure(context, budget, K, origin, 0);
 
     kmer_t origin_complement = COMPLEMENTS ? complement_kmer(origin) : kmer_t(0);
-    const bool use_skip_to = USE_SKIP_TO && budget >= PENALTY;
+    const bool use_skip_to = USE_SKIP_TO;
 
     while (!context.stack.empty()){
         SearchEntry entry = context.stack.back(); context.stack.pop_back();
@@ -320,20 +324,34 @@ inline bool LeafOnlyAC<kmer_t, size_n_max, priority_t>::search(SearchContext &co
             priority_t remaining = relaxed_load(remaining_priorities[i]);
             priority_t new_remaining = priority_t(std::min(priority, PRIORITY_SATURATION));
             if (remaining >= priority){
-                if (use_skip_to){ /// Skip the whole run of leaves with high enough priority (with path compression)
+                if (use_skip_to){
+                    /// Skip the run of leaves with high enough priority; a pointer is followed only if all leaves it skips
+                    /// have high enough priority, so this is equivalent to checking each leaf
                     size_n_max j = i;
-                    while (j < N && relaxed_load(remaining_priorities[j]) >= priority && prefix == BitPrefix(kMers[j], K, depth)) j = relaxed_load(skip_to[j]);
-                    /// Pointers only point forward, a concurrent search may redirect the chain past j
-                    for (size_n_max s = i; s < j; ){ size_n_max next_s = relaxed_load(skip_to[s]); relaxed_store(skip_to[s], j); s = next_s; }
+                    context.hops.clear();
+                    while (j < N && prefix == BitPrefix(kMers[j], K, depth)){
+                        size_n_max to = relaxed_load(skip_to[j]);
+                        priority_t to_min = relaxed_load(skip_min[j]);
+                        priority_t own = relaxed_load(remaining_priorities[j]);
+                        if (to > j + 1 && to_min >= priority){ context.hops.emplace_back(j, std::min(to_min, own)); j = to; }
+                        else if (own >= priority){ context.hops.emplace_back(j, own); j = j + 1; }
+                        else break;
+                    }
+                    if (context.hops.size() > 1){ /// Path compression with suffix minima
+                        priority_t suffix_min = std::numeric_limits<priority_t>::max();
+                        for (size_t h = context.hops.size(); h-- > 0; ){
+                            suffix_min = std::min(suffix_min, context.hops[h].second);
+                            size_n_max s = context.hops[h].first;
+                            relaxed_store(skip_min[s], suffix_min);
+                            relaxed_store(skip_to[s], j);
+                            context.pointer_writes.push_back(s);
+                        }
+                    }
                     i = j - 1; /// j itself has to be examined
                 }
                 continue;
             }
             relaxed_store_max(remaining_priorities[i], new_remaining);
-            if (use_skip_to){
-                size_n_max skip = relaxed_load(skip_to[i]);
-                if (skip >= N || relaxed_load(remaining_priorities[skip]) < priority) relaxed_store(skip_to[i], size_n_max(i + 1));
-            }
             context.log.push_back({i, remaining, new_remaining, false, log});
             push_failure(context, priority, K, i, context.log.size() - 1); /// Failure of leaf i
         }
@@ -369,13 +387,16 @@ inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::push_failure(SearchConte
 /// (unless another search raised it meanwhile), so that they do not prune later searches
 template <typename kmer_t, typename size_n_max, typename priority_t>
 inline void LeafOnlyAC<kmer_t, size_n_max, priority_t>::restore_unexpanded(SearchContext &context) {
+    bool restored_any = false;
     for (const auto &entry : context.stack){
         for (size_t log = entry.log; log != 0 && !context.log[log].restored; log = context.log[log].parent){
             LogEntry &leaf = context.log[log];
-            leaf.restored = true;
+            leaf.restored = restored_any = true;
             relaxed_replace(remaining_priorities[leaf.leaf], leaf.new_priority, leaf.old_priority);
         }
     }
+    /// Skip pointers written by this search may rely on the restored priorities (older ones never do)
+    if (restored_any && USE_SKIP_TO) for (size_n_max s : context.pointer_writes) relaxed_store(skip_to[s], size_n_max(s + 1));
 }
 
 template <typename kmer_t, typename size_n_max, typename priority_t>
